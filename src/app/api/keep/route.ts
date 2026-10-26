@@ -1,118 +1,104 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { PUBLIC_USER_SELECT, handleError, memberCalendarIds, requireMember, requireUser, HttpError } from "@/lib/auth";
+import { hexColor, str } from "@/lib/validate";
+
+const include = { creator: { select: PUBLIC_USER_SELECT } };
+
+async function loadItem(id: unknown) {
+  if (typeof id !== "string" || !id) throw new HttpError(400, "Item ID is required");
+  const item = await prisma.keepItem.findUnique({ where: { id }, select: { id: true, calendarId: true } });
+  if (!item) throw new HttpError(404, "Item not found");
+  return item;
+}
 
 export async function GET(req: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const calendarId = searchParams.get("calendarId");
+    const me = await requireUser(req);
+    const calendarId = new URL(req.url).searchParams.get("calendarId");
 
-    const where: any = {};
+    let calendarFilter: string | { in: string[] };
     if (calendarId && calendarId !== "all") {
-      where.calendarId = calendarId;
+      await requireMember(me.id, calendarId, "VIEWER");
+      calendarFilter = calendarId;
+    } else {
+      calendarFilter = { in: await memberCalendarIds(me.id) };
     }
 
     const items = await prisma.keepItem.findMany({
-      where,
-      include: {
-        creator: true,
-      },
+      where: { calendarId: calendarFilter },
+      include,
       orderBy: [{ isCompleted: "asc" }, { createdAt: "desc" }],
     });
-
     return NextResponse.json(items);
   } catch (error) {
-    console.error("GET /api/keep error:", error);
-    return NextResponse.json({ error: "Failed to fetch keep items" }, { status: 500 });
+    return handleError(error, "GET /api/keep", "Failed to fetch keep items");
   }
 }
 
 export async function POST(req: Request) {
   try {
+    const me = await requireUser(req);
     const body = await req.json();
-    const { calendarId, creatorId, title, content, isChecklist, color } = body;
-
-    if (!calendarId || !creatorId || !title) {
-      return NextResponse.json(
-        { error: "Calendar ID, creator ID, and title are required" },
-        { status: 400 }
-      );
-    }
+    const calendarId = str(body.calendarId, "calendarId", 100, true)!;
+    await requireMember(me.id, calendarId, "MEMBER");
+    const title = str(body.title, "제목", 200, true)!;
 
     const item = await prisma.keepItem.create({
       data: {
         calendarId,
-        creatorId,
+        creatorId: me.id,
         title,
-        content: content || null,
-        isChecklist: !!isChecklist,
-        color: color || "#FEF3C7",
+        content: str(body.content, "내용", 10000),
+        isChecklist: !!body.isChecklist,
+        color: hexColor(body.color) || "#FEF3C7",
       },
-      include: {
-        creator: true,
-      },
+      include,
     });
 
     await prisma.activityLog.create({
-      data: {
-        calendarId,
-        userId: creatorId,
-        action: "CREATED_KEEP",
-        targetTitle: title,
-      },
+      data: { calendarId, userId: me.id, action: "CREATED_KEEP", targetTitle: title },
     });
 
     return NextResponse.json(item);
   } catch (error) {
-    console.error("POST /api/keep error:", error);
-    return NextResponse.json({ error: "Failed to create keep item" }, { status: 500 });
+    return handleError(error, "POST /api/keep", "Failed to create keep item");
   }
 }
 
 export async function PUT(req: Request) {
   try {
+    const me = await requireUser(req);
     const body = await req.json();
-    const { id, title, content, isCompleted, color } = body;
+    const existing = await loadItem(body.id);
+    await requireMember(me.id, existing.calendarId, "MEMBER");
 
-    if (!id) {
-      return NextResponse.json({ error: "Item ID is required" }, { status: 400 });
-    }
-
+    const title = str(body.title, "제목", 200);
     const item = await prisma.keepItem.update({
-      where: { id },
+      where: { id: existing.id },
       data: {
         ...(title && { title }),
-        ...(content !== undefined && { content }),
-        ...(isCompleted !== undefined && { isCompleted }),
-        ...(color !== undefined && { color }),
+        ...(body.content !== undefined && { content: str(body.content, "내용", 10000) }),
+        ...(body.isCompleted !== undefined && { isCompleted: !!body.isCompleted }),
+        ...(body.color !== undefined && { color: hexColor(body.color) }),
       },
-      include: {
-        creator: true,
-      },
+      include,
     });
-
     return NextResponse.json(item);
   } catch (error) {
-    console.error("PUT /api/keep error:", error);
-    return NextResponse.json({ error: "Failed to update keep item" }, { status: 500 });
+    return handleError(error, "PUT /api/keep", "Failed to update keep item");
   }
 }
 
 export async function DELETE(req: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get("id");
+    const me = await requireUser(req);
+    const existing = await loadItem(new URL(req.url).searchParams.get("id"));
+    await requireMember(me.id, existing.calendarId, "MEMBER");
 
-    if (!id) {
-      return NextResponse.json({ error: "Item ID is required" }, { status: 400 });
-    }
-
-    await prisma.keepItem.delete({
-      where: { id },
-    });
-
+    await prisma.keepItem.delete({ where: { id: existing.id } });
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("DELETE /api/keep error:", error);
-    return NextResponse.json({ error: "Failed to delete keep item" }, { status: 500 });
+    return handleError(error, "DELETE /api/keep", "Failed to delete keep item");
   }
 }

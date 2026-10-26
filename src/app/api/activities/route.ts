@@ -1,30 +1,25 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { PUBLIC_USER_SELECT, handleError, memberCalendarIds, requireMember, requireUser } from "@/lib/auth";
 
 export async function GET(req: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const calendarId = searchParams.get("calendarId");
-    const userId = searchParams.get("userId");
+    const me = await requireUser(req);
+    const calendarId = new URL(req.url).searchParams.get("calendarId");
 
-    const where: any = {};
+    let calendarFilter: string | { in: string[] };
     if (calendarId && calendarId !== "all") {
-      where.calendarId = calendarId;
-    } else if (userId) {
-      where.calendar = {
-        members: {
-          some: { userId },
-        },
-      };
+      await requireMember(me.id, calendarId, "VIEWER");
+      calendarFilter = calendarId;
+    } else {
+      calendarFilter = { in: await memberCalendarIds(me.id) };
     }
 
     const activities = await prisma.activityLog.findMany({
-      where,
+      where: { calendarId: calendarFilter },
       include: {
-        user: true,
-        calendar: {
-          select: { id: true, name: true, color: true },
-        },
+        user: { select: PUBLIC_USER_SELECT },
+        calendar: { select: { id: true, name: true, color: true } },
       },
       orderBy: { createdAt: "desc" },
       take: 50,
@@ -32,7 +27,6 @@ export async function GET(req: Request) {
 
     return NextResponse.json(activities);
   } catch (error) {
-    console.error("GET /api/activities error:", error);
-    return NextResponse.json({ error: "Failed to fetch activities" }, { status: 500 });
+    return handleError(error, "GET /api/activities", "Failed to fetch activities");
   }
 }

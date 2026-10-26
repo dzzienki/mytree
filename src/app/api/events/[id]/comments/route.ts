@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { handleError, requireMember, requireUser, HttpError, PUBLIC_USER_SELECT } from "@/lib/auth";
+import { str } from "@/lib/validate";
 
 export async function POST(
   req: Request,
@@ -7,40 +9,24 @@ export async function POST(
 ) {
   try {
     const { id: eventId } = await params;
+    const me = await requireUser(req);
+
+    const event = await prisma.event.findUnique({ where: { id: eventId } });
+    if (!event) throw new HttpError(404, "Event not found");
+    await requireMember(me.id, event.calendarId, "MEMBER");
+
     const body = await req.json();
-    const { userId, content } = body;
-
-    if (!userId || !content?.trim()) {
-      return NextResponse.json(
-        { error: "User ID and comment content are required" },
-        { status: 400 }
-      );
-    }
-
-    const event = await prisma.event.findUnique({
-      where: { id: eventId },
-    });
-
-    if (!event) {
-      return NextResponse.json({ error: "Event not found" }, { status: 404 });
-    }
+    const content = str(body.content, "댓글", 1000, true)!;
 
     const comment = await prisma.eventComment.create({
-      data: {
-        eventId,
-        userId,
-        content: content.trim(),
-      },
-      include: {
-        user: true,
-      },
+      data: { eventId, userId: me.id, content },
+      include: { user: { select: PUBLIC_USER_SELECT } },
     });
 
-    // Log activity
     await prisma.activityLog.create({
       data: {
         calendarId: event.calendarId,
-        userId,
+        userId: me.id,
         action: "COMMENTED",
         targetTitle: event.title,
         details: JSON.stringify({ commentId: comment.id, content: content.slice(0, 50) }),
@@ -49,7 +35,6 @@ export async function POST(
 
     return NextResponse.json(comment);
   } catch (error) {
-    console.error("POST /api/events/[id]/comments error:", error);
-    return NextResponse.json({ error: "Failed to add comment" }, { status: 500 });
+    return handleError(error, "POST /api/events/[id]/comments", "Failed to add comment");
   }
 }

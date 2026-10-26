@@ -261,7 +261,7 @@ function InviteContent() {
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                   <input
                     type="password"
-                    placeholder="비밀번호 (최소 4자리)"
+                    placeholder="비밀번호 (최소 8자리)"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-emerald-500"

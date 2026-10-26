@@ -98,6 +98,7 @@ function LoginForm() {
           >
             로그인
           </button>
+          {inviteCode && (
           <button
             type="button"
             onClick={() => {
@@ -112,6 +113,7 @@ function LoginForm() {
           >
             회원가입
           </button>
+          )}
         </div>
 
         {/* Form Body */}
@@ -154,7 +156,7 @@ function LoginForm() {
               <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
               <input
                 type="password"
-                placeholder="비밀번호 입력 (최소 4자리)"
+                placeholder="비밀번호 입력 (최소 8자리)"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-emerald-500"
@@ -174,7 +176,8 @@ function LoginForm() {
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
 
-          {/* Quick Demo Login (Convenience) */}
+          {/* Quick Demo Login (development only) */}
+          {process.env.NODE_ENV === "development" && (
           <div className="pt-3 border-t border-slate-100">
             <p className="text-[11px] text-slate-400 text-center mb-2 font-medium">
               ⚡ 빠른 테스트를 위한 1초 로그인:
@@ -198,6 +201,7 @@ function LoginForm() {
               </button>
             </div>
           </div>
+          )}
         </form>
       </div>
     </div>

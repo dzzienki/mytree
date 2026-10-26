@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { handleError, requireUser } from "@/lib/auth";
 
 export async function GET(
   req: Request,
@@ -38,53 +39,26 @@ export async function POST(
 ) {
   try {
     const { code } = await params;
-    const body = await req.json();
-    const { userId } = body;
+    const me = await requireUser(req);
 
-    if (!userId) {
-      return NextResponse.json({ error: "User ID is required" }, { status: 400 });
-    }
-
-    const calendar = await prisma.calendar.findUnique({
-      where: { inviteCode: code },
-    });
-
+    const calendar = await prisma.calendar.findUnique({ where: { inviteCode: code } });
     if (!calendar) {
       return NextResponse.json({ error: "Calendar not found" }, { status: 404 });
     }
 
-    // Check if already a member
     const existing = await prisma.calendarMember.findUnique({
-      where: {
-        calendarId_userId: {
-          calendarId: calendar.id,
-          userId,
-        },
-      },
+      where: { calendarId_userId: { calendarId: calendar.id, userId: me.id } },
     });
-
     if (existing) {
-      return NextResponse.json({
-        message: "Already a member",
-        calendarId: calendar.id,
-      });
+      return NextResponse.json({ message: "Already a member", calendarId: calendar.id });
     }
 
     const member = await prisma.calendarMember.create({
-      data: {
-        calendarId: calendar.id,
-        userId,
-        role: "MEMBER",
-      },
+      data: { calendarId: calendar.id, userId: me.id, role: "MEMBER" },
     });
 
-    return NextResponse.json({
-      success: true,
-      calendarId: calendar.id,
-      member,
-    });
+    return NextResponse.json({ success: true, calendarId: calendar.id, member });
   } catch (error) {
-    console.error("POST /api/invite/[code] error:", error);
-    return NextResponse.json({ error: "Failed to join calendar" }, { status: 500 });
+    return handleError(error, "POST /api/invite/[code]", "Failed to join calendar");
   }
 }

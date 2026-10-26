@@ -1,5 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { handleError, requireMember, requireUser, HttpError } from "@/lib/auth";
+import { eventInclude } from "@/lib/includes";
+import { assertCalendarRefs, attachmentList, bad, date, httpUrl, idArray, str } from "@/lib/validate";
+
+async function loadEvent(id: string) {
+  const event = await prisma.event.findUnique({ where: { id }, select: { id: true, calendarId: true, title: true, startAt: true, endAt: true } });
+  if (!event) throw new HttpError(404, "Event not found");
+  return event;
+}
 
 export async function GET(
   req: Request,
@@ -7,29 +16,14 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const event = await prisma.event.findUnique({
-      where: { id },
-      include: {
-        label: true,
-        creator: true,
-        calendar: { select: { id: true, name: true, color: true } },
-        participants: { include: { user: true } },
-        attachments: true,
-        comments: {
-          include: { user: true },
-          orderBy: { createdAt: "asc" },
-        },
-      },
-    });
+    const me = await requireUser(req);
+    const found = await loadEvent(id);
+    await requireMember(me.id, found.calendarId, "VIEWER");
 
-    if (!event) {
-      return NextResponse.json({ error: "Event not found" }, { status: 404 });
-    }
-
+    const event = await prisma.event.findUnique({ where: { id }, include: eventInclude });
     return NextResponse.json(event);
   } catch (error) {
-    console.error("GET /api/events/[id] error:", error);
-    return NextResponse.json({ error: "Failed to fetch event" }, { status: 500 });
+    return handleError(error, "GET /api/events/[id]", "Failed to fetch event");
   }
 }
 
@@ -39,96 +33,69 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
+    const me = await requireUser(req);
+    const existing = await loadEvent(id);
+    await requireMember(me.id, existing.calendarId, "MEMBER");
+
     const body = await req.json();
-    const {
-      title,
-      description,
-      location,
-      url,
-      labelId,
-      isAllDay,
-      startAt,
-      endAt,
-      recurrenceRule,
-      participantIds,
-      attachments,
-      updaterId,
-    } = body;
-
-    // If attachments provided, update relation
-    if (attachments !== undefined) {
-      await prisma.eventAttachment.deleteMany({
-        where: { eventId: id },
-      });
-      if (attachments.length > 0) {
-        await prisma.eventAttachment.createMany({
-          data: attachments.map((att: any) => ({
-            eventId: id,
-            fileUrl: att.fileUrl || att.url,
-            fileName: att.fileName || "image.jpg",
-            fileType: att.fileType || "image/jpeg",
-          })),
-        });
-      }
+    const title = str(body.title, "제목", 200);
+    const startAt = body.startAt ? date(body.startAt, "시작 시간") : undefined;
+    const endAt = body.endAt ? date(body.endAt, "종료 시간") : undefined;
+    if ((endAt ?? existing.endAt) < (startAt ?? existing.startAt)) {
+      bad("종료 시간은 시작 시간보다 빠를 수 없습니다.");
     }
 
-    // If participantIds provided, update relation
-    if (participantIds !== undefined) {
-      await prisma.eventParticipant.deleteMany({
-        where: { eventId: id },
-      });
-      if (participantIds.length > 0) {
-        await prisma.eventParticipant.createMany({
-          data: participantIds.map((userId: string) => ({
-            eventId: id,
-            userId,
-          })),
-        });
+    const labelId = body.labelId !== undefined ? str(body.labelId, "labelId", 100) : undefined;
+    const participantIds = body.participantIds !== undefined ? idArray(body.participantIds, "참석자") : undefined;
+    const attachments = body.attachments !== undefined ? attachmentList(body.attachments) : undefined;
+    await assertCalendarRefs(existing.calendarId, participantIds ?? [], labelId ?? null);
+
+    // One transaction so a failure can't leave the event with its attachments/participants wiped.
+    const event = await prisma.$transaction(async (tx) => {
+      if (attachments !== undefined) {
+        await tx.eventAttachment.deleteMany({ where: { eventId: id } });
+        if (attachments.length) {
+          await tx.eventAttachment.createMany({ data: attachments.map((a) => ({ ...a, eventId: id })) });
+        }
       }
-    }
+      if (participantIds !== undefined) {
+        await tx.eventParticipant.deleteMany({ where: { eventId: id } });
+        if (participantIds.length) {
+          await tx.eventParticipant.createMany({ data: participantIds.map((userId) => ({ eventId: id, userId })) });
+        }
+      }
 
-    const event = await prisma.event.update({
-      where: { id },
-      data: {
-        ...(title && { title }),
-        ...(description !== undefined && { description }),
-        ...(location !== undefined && { location }),
-        ...(url !== undefined && { url }),
-        ...(labelId !== undefined && { labelId: labelId || null }),
-        ...(isAllDay !== undefined && { isAllDay }),
-        ...(startAt && { startAt: new Date(startAt) }),
-        ...(endAt && { endAt: new Date(endAt) }),
-        ...(recurrenceRule !== undefined && { recurrenceRule }),
-      },
-      include: {
-        label: true,
-        creator: true,
-        calendar: { select: { id: true, name: true, color: true } },
-        participants: { include: { user: true } },
-        attachments: true,
-        comments: {
-          include: { user: true },
-          orderBy: { createdAt: "asc" },
-        },
-      },
-    });
-
-    if (updaterId) {
-      await prisma.activityLog.create({
+      const updated = await tx.event.update({
+        where: { id },
         data: {
-          calendarId: event.calendarId,
-          userId: updaterId,
+          ...(title && { title }),
+          ...(body.description !== undefined && { description: str(body.description, "설명", 5000) }),
+          ...(body.location !== undefined && { location: str(body.location, "장소", 300) }),
+          ...(body.url !== undefined && { url: httpUrl(body.url) }),
+          ...(labelId !== undefined && { labelId }),
+          ...(body.isAllDay !== undefined && { isAllDay: !!body.isAllDay }),
+          ...(startAt && { startAt }),
+          ...(endAt && { endAt }),
+          ...(body.recurrenceRule !== undefined && { recurrenceRule: str(body.recurrenceRule, "반복 규칙", 500) }),
+        },
+        include: eventInclude,
+      });
+
+      await tx.activityLog.create({
+        data: {
+          calendarId: updated.calendarId,
+          userId: me.id,
           action: "UPDATED_EVENT",
-          targetTitle: event.title,
-          details: JSON.stringify({ eventId: event.id }),
+          targetTitle: updated.title,
+          details: JSON.stringify({ eventId: updated.id }),
         },
       });
-    }
+      return updated;
+    });
 
     return NextResponse.json(event);
   } catch (error) {
-    console.error("PUT /api/events/[id] error:", error);
-    return NextResponse.json({ error: "Failed to update event" }, { status: 500 });
+    return handleError(error, "PUT /api/events/[id]", "Failed to update event");
   }
 }
 
@@ -138,35 +105,19 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
+    const me = await requireUser(req);
+    const event = await loadEvent(id);
+    await requireMember(me.id, event.calendarId, "MEMBER");
 
-    const event = await prisma.event.findUnique({
-      where: { id },
-    });
-
-    if (!event) {
-      return NextResponse.json({ error: "Event not found" }, { status: 404 });
-    }
-
-    await prisma.event.delete({
-      where: { id },
-    });
-
-    if (userId) {
-      await prisma.activityLog.create({
-        data: {
-          calendarId: event.calendarId,
-          userId,
-          action: "DELETED_EVENT",
-          targetTitle: event.title,
-        },
-      });
-    }
+    await prisma.$transaction([
+      prisma.event.delete({ where: { id } }),
+      prisma.activityLog.create({
+        data: { calendarId: event.calendarId, userId: me.id, action: "DELETED_EVENT", targetTitle: event.title },
+      }),
+    ]);
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("DELETE /api/events/[id] error:", error);
-    return NextResponse.json({ error: "Failed to delete event" }, { status: 500 });
+    return handleError(error, "DELETE /api/events/[id]", "Failed to delete event");
   }
 }

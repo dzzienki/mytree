@@ -1,39 +1,20 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { PUBLIC_USER_SELECT, handleError, memberCalendarIds, requireUser } from "@/lib/auth";
 
-export async function GET() {
+// Lists only people who share a calendar with the caller. Accounts are created
+// exclusively through /api/auth/signup (invite-only); there is no public POST here.
+export async function GET(req: Request) {
   try {
+    const me = await requireUser(req);
+    const calendarIds = await memberCalendarIds(me.id);
     const users = await prisma.user.findMany({
+      where: { calendarMembers: { some: { calendarId: { in: calendarIds } } } },
+      select: PUBLIC_USER_SELECT,
       orderBy: { createdAt: "asc" },
     });
     return NextResponse.json(users);
   } catch (error) {
-    console.error("GET /api/users error:", error);
-    return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 });
-  }
-}
-
-export async function POST(req: Request) {
-  try {
-    const body = await req.json();
-    const { name, email, avatarUrl, color } = body;
-
-    if (!name || !email) {
-      return NextResponse.json({ error: "Name and email are required" }, { status: 400 });
-    }
-
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email,
-        avatarUrl,
-        color: color || "#10B981",
-      },
-    });
-
-    return NextResponse.json(user);
-  } catch (error) {
-    console.error("POST /api/users error:", error);
-    return NextResponse.json({ error: "Failed to create user" }, { status: 500 });
+    return handleError(error, "GET /api/users", "Failed to fetch users");
   }
 }

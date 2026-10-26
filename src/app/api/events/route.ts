@@ -1,144 +1,89 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { handleError, memberCalendarIds, requireMember, requireUser } from "@/lib/auth";
+import { eventInclude } from "@/lib/includes";
+import { assertCalendarRefs, attachmentList, bad, date, httpUrl, idArray, str } from "@/lib/validate";
 
 export async function GET(req: Request) {
   try {
+    const me = await requireUser(req);
     const { searchParams } = new URL(req.url);
     const calendarId = searchParams.get("calendarId");
-    const startDate = searchParams.get("startDate");
-    const endDate = searchParams.get("endDate");
-    const userId = searchParams.get("userId");
 
-    const where: any = {};
+    const where: Prisma.EventWhereInput = {};
 
     if (calendarId && calendarId !== "all") {
+      await requireMember(me.id, calendarId, "VIEWER");
       where.calendarId = calendarId;
-    } else if (userId) {
-      where.calendar = {
-        members: {
-          some: { userId },
-        },
-      };
+    } else {
+      where.calendarId = { in: await memberCalendarIds(me.id) };
     }
 
-    if (startDate && endDate) {
+    const startParam = searchParams.get("startDate");
+    const endParam = searchParams.get("endDate");
+    if (startParam && endParam) {
+      const start = date(startParam, "startDate");
+      const end = date(endParam, "endDate");
       where.OR = [
-        {
-          startAt: {
-            gte: new Date(startDate),
-            lte: new Date(endDate),
-          },
-        },
-        {
-          endAt: {
-            gte: new Date(startDate),
-            lte: new Date(endDate),
-          },
-        },
-        {
-          AND: [
-            { startAt: { lte: new Date(startDate) } },
-            { endAt: { gte: new Date(endDate) } },
-          ],
-        },
+        { startAt: { gte: start, lte: end } },
+        { endAt: { gte: start, lte: end } },
+        { AND: [{ startAt: { lte: start } }, { endAt: { gte: end } }] },
       ];
     }
 
     const events = await prisma.event.findMany({
       where,
-      include: {
-        label: true,
-        creator: true,
-        calendar: {
-          select: { id: true, name: true, color: true },
-        },
-        participants: {
-          include: { user: true },
-        },
-        attachments: true,
-        comments: {
-          include: { user: true },
-          orderBy: { createdAt: "asc" },
-        },
-        _count: {
-          select: { comments: true },
-        },
-      },
+      include: eventInclude,
       orderBy: { startAt: "asc" },
     });
 
     return NextResponse.json(events);
   } catch (error) {
-    console.error("GET /api/events error:", error);
-    return NextResponse.json({ error: "Failed to fetch events" }, { status: 500 });
+    return handleError(error, "GET /api/events", "Failed to fetch events");
   }
 }
 
 export async function POST(req: Request) {
   try {
+    const me = await requireUser(req);
     const body = await req.json();
-    const {
-      calendarId,
-      creatorId,
-      labelId,
-      title,
-      description,
-      location,
-      url,
-      isAllDay,
-      startAt,
-      endAt,
-      recurrenceRule,
-      participantIds = [],
-      attachments = [],
-    } = body;
 
-    if (!calendarId || !creatorId || !title || !startAt || !endAt) {
-      return NextResponse.json(
-        { error: "Required fields are missing (calendarId, creatorId, title, startAt, endAt)" },
-        { status: 400 }
-      );
-    }
+    const calendarId = str(body.calendarId, "calendarId", 100, true)!;
+    await requireMember(me.id, calendarId, "MEMBER");
+
+    const title = str(body.title, "제목", 200, true)!;
+    const startAt = date(body.startAt, "시작 시간");
+    const endAt = date(body.endAt, "종료 시간");
+    if (endAt < startAt) bad("종료 시간은 시작 시간보다 빠를 수 없습니다.");
+
+    const labelId = str(body.labelId, "labelId", 100);
+    const participantIds = idArray(body.participantIds, "참석자");
+    await assertCalendarRefs(calendarId, participantIds, labelId);
 
     const event = await prisma.event.create({
       data: {
         calendarId,
-        creatorId,
-        labelId: labelId || null,
+        creatorId: me.id,
+        labelId,
         title,
-        description: description || null,
-        location: location || null,
-        url: url || null,
-        isAllDay: !!isAllDay,
-        startAt: new Date(startAt),
-        endAt: new Date(endAt),
-        recurrenceRule: recurrenceRule || null,
-        participants: {
-          create: participantIds.map((userId: string) => ({ userId })),
-        },
-        attachments: {
-          create: attachments.map((att: any) => ({
-            fileUrl: att.fileUrl || att.url,
-            fileName: att.fileName || "image.jpg",
-            fileType: att.fileType || "image/jpeg",
-          })),
-        },
+        description: str(body.description, "설명", 5000),
+        location: str(body.location, "장소", 300),
+        url: httpUrl(body.url),
+        isAllDay: !!body.isAllDay,
+        startAt,
+        endAt,
+        recurrenceRule: str(body.recurrenceRule, "반복 규칙", 500),
+        participants: { create: participantIds.map((userId) => ({ userId })) },
+        attachments: { create: attachmentList(body.attachments) },
       },
-      include: {
-        label: true,
-        creator: true,
-        calendar: { select: { id: true, name: true, color: true } },
-        participants: { include: { user: true } },
-        attachments: true,
-        _count: { select: { comments: true } },
-      },
+      include: eventInclude,
     });
 
-    // Create activity log
     await prisma.activityLog.create({
       data: {
         calendarId,
-        userId: creatorId,
+        userId: me.id,
         action: "CREATED_EVENT",
         targetTitle: title,
         details: JSON.stringify({ eventId: event.id, startAt }),
@@ -147,7 +92,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json(event);
   } catch (error) {
-    console.error("POST /api/events error:", error);
-    return NextResponse.json({ error: "Failed to create event" }, { status: 500 });
+    return handleError(error, "POST /api/events", "Failed to create event");
   }
 }

@@ -1,53 +1,35 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { handleError, requireUser } from "@/lib/auth";
+import { hexColor, str } from "@/lib/validate";
+import { calendarInclude } from "@/lib/includes";
 
 export async function GET(req: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
+    const me = await requireUser(req);
 
     const calendars = await prisma.calendar.findMany({
-      where: userId
-        ? {
-            members: {
-              some: { userId },
-            },
-          }
-        : undefined,
+      where: { members: { some: { userId: me.id } } },
       include: {
-        members: {
-          include: {
-            user: true,
-          },
-        },
-        labels: {
-          orderBy: { orderIndex: "asc" },
-        },
-        _count: {
-          select: {
-            events: true,
-            keepItems: true,
-          },
-        },
+        ...calendarInclude,
+        _count: { select: { events: true, keepItems: true } },
       },
       orderBy: { createdAt: "asc" },
     });
 
     return NextResponse.json(calendars);
   } catch (error) {
-    console.error("GET /api/calendars error:", error);
-    return NextResponse.json({ error: "Failed to fetch calendars" }, { status: 500 });
+    return handleError(error, "GET /api/calendars", "Failed to fetch calendars");
   }
 }
 
 export async function POST(req: Request) {
   try {
+    const me = await requireUser(req);
     const body = await req.json();
-    const { name, description, color, userId } = body;
-
-    if (!name || !userId) {
-      return NextResponse.json({ error: "Name and userId are required" }, { status: 400 });
-    }
+    const name = str(body.name, "캘린더 이름", 50, true)!;
+    const description = str(body.description, "설명", 500);
+    const color = hexColor(body.color);
 
     const defaultLabels = [
       { name: "기본 일정", colorHex: color || "#10B981", orderIndex: 0 },
@@ -62,27 +44,14 @@ export async function POST(req: Request) {
         name,
         description,
         color: color || "#10B981",
-        members: {
-          create: {
-            userId,
-            role: "OWNER",
-          },
-        },
-        labels: {
-          create: defaultLabels,
-        },
+        members: { create: { userId: me.id, role: "OWNER" } },
+        labels: { create: defaultLabels },
       },
-      include: {
-        members: {
-          include: { user: true },
-        },
-        labels: true,
-      },
+      include: calendarInclude,
     });
 
     return NextResponse.json(calendar);
   } catch (error) {
-    console.error("POST /api/calendars error:", error);
-    return NextResponse.json({ error: "Failed to create calendar" }, { status: 500 });
+    return handleError(error, "POST /api/calendars", "Failed to create calendar");
   }
 }
