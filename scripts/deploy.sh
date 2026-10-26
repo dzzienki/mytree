@@ -5,11 +5,13 @@
 #   ./scripts/deploy.sh --no-pull  same, but skip `git pull` (deploy what is checked out)
 #
 # Run from anywhere; it always operates on the repo this script lives in.
+# Env overrides: PM2_NAME (default mytree), PORT (default 3100; 3000 is often taken by other apps).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
 PM2_NAME="${PM2_NAME:-mytree}"
+PORT="${PORT:-3100}"
 PULL=1
 [ "${1:-}" = "--no-pull" ] && PULL=0
 
@@ -41,17 +43,15 @@ npm run db:push
 step "Building"
 npm run build
 
-step "Restarting"
+step "Restarting on port $PORT"
 if command -v pm2 >/dev/null; then
-  if pm2 describe "$PM2_NAME" >/dev/null 2>&1; then
-    pm2 restart "$PM2_NAME" --update-env
-  else
-    pm2 start npm --name "$PM2_NAME" -- start
-    pm2 save
-  fi
+  # Delete + start (instead of restart) so a changed port or name always takes effect.
+  pm2 delete "$PM2_NAME" >/dev/null 2>&1 || true
+  pm2 start npm --name "$PM2_NAME" -- start -- -p "$PORT"
+  pm2 save
   pm2 status "$PM2_NAME"
 else
-  printf 'pm2 not found. Build finished; start the server manually with: npm run start\n'
+  printf 'pm2 not found. Build finished; start the server manually with: npm run start -- -p %s\n' "$PORT"
 fi
 
 step "Done"
