@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# mytree 🌿 (TimeTree 완벽 클론 웹 애플리케이션)
 
-## Getting Started
+TimeTree의 핵심 UX/UI와 기능을 그대로 구현한 **개인 호스팅 & 가족/지인 공유 캘린더 서비스**입니다.
 
-First, run the development server:
+---
+
+## 🌟 주요 기능
+
+1. **다중 공유 캘린더**
+   - 목적별(가족용, 개인용, 모임용 등) 캘린더 생성 및 분리
+   - "모든 캘린더 모아보기" 통합 뷰 제공
+   - 캘린더별 커스텀 대표 색상 및 라벨(태그) 설정
+
+2. **4가지 캘린더 뷰**
+   - **월간 뷰 (Month)**: TimeTree 특유의 직관적인 일자별/멀티데이 일정 뱃지, 오늘 날짜 인디케이터
+   - **주간 뷰 (Week)**: 24시간 타임라인 기반 블록 스케줄
+   - **목록 뷰 (List/Agenda)**: 날짜순 정렬된 다가오는 일정 카드
+   - **피드 뷰 (Feed)**: 멤버들의 일정 추가, 수정, 댓글 작성 내역 실시간 타임라인
+
+3. **TimeTree 시그니처: Keep (보관함)**
+   - 날짜가 정해지지 않은 메모 및 체크리스트(To-do) 관리
+   - 장보기 목록, 가보고 싶은 맛집 리스트 등 작성
+   - 원클릭 **"일정으로 등록"** 지원
+
+4. **일정별 피드 & 실시간 댓글 (소통)**
+   - 개별 일정 카드 내에서 참여자 간의 채팅 및 댓글 스레드
+   - 작성자 아바타 및 타임스탬프 기록
+
+5. **공유 링크 및 멤버 초대 시스템**
+   - 캘린더별 고유 초대 코드/링크 생성 (예: `/invite/family-mytree-2026`)
+   - 초대받은 사용자가 이름/이메일을 입력하거나 기존 계정으로 즉시 참여 가능
+
+---
+
+## 🛠️ 기술 스택
+
+- **Framework**: Next.js 16 (App Router, Turbopack, React 19)
+- **Database**: PostgreSQL 15.8 (전용 `mytree_db` 및 `mytree_user` 격리 계정)
+- **ORM**: Prisma 6 (Type-safe 데이터베이스 클라이언트)
+- **Styling**: Tailwind CSS v4
+- **Icons**: Lucide Icons
+- **Date Utilities**: date-fns, rrule (RFC 5545)
+
+---
+
+## 🚀 로컬 실행 방법
 
 ```bash
+# 1. 의존성 설치 (이미 완료됨)
+npm install
+
+# 2. 개발 서버 실행
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+
+# 3. 브라우저에서 열기
+# http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 👥 사용자 전환 (테스트 기능)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+우측 상단 아바타 아이콘을 클릭하여 **'나 (호스트)'**와 **'김지우 (가족 멤버)'** 간의 계정을 자유롭게 전환하면서, 다자간 일정 공유 및 댓글 대화 UX를 실시간으로 테스트할 수 있습니다.

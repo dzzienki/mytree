@@ -1,69 +1,350 @@
-import Image from "next/image";
+"use client";
+
+import React, { useState, useEffect, useCallback, Suspense } from "react";
+import Header from "@/components/Header";
+import Sidebar from "@/components/Sidebar";
+import MonthView from "@/components/MonthView";
+import WeekView from "@/components/WeekView";
+import ListView from "@/components/ListView";
+import KeepView from "@/components/KeepView";
+import FeedView from "@/components/FeedView";
+import EventModal from "@/components/EventModal";
+import EventDetailDrawer from "@/components/EventDetailDrawer";
+import CalendarModal from "@/components/CalendarModal";
+import InviteModal from "@/components/InviteModal";
+import { addMonths, subMonths, addWeeks, subWeeks, addDays, subDays } from "date-fns";
+import { CalendarDto, EventDto, KeepItemDto, ActivityLogDto, UserDto } from "@/types";
+
+function CalendarApp() {
+  // Navigation & State
+  const [currentDate, setCurrentDate] = useState<Date>(new Date());
+  const [activeTab, setActiveTab] = useState<"month" | "week" | "list" | "keep" | "feed">("month");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  // Data
+  const [users, setUsers] = useState<UserDto[]>([]);
+  const [currentUser, setCurrentUser] = useState<UserDto | null>(null);
+  const [calendars, setCalendars] = useState<CalendarDto[]>([]);
+  const [activeCalendar, setActiveCalendar] = useState<CalendarDto | null>(null);
+  const [events, setEvents] = useState<EventDto[]>([]);
+  const [keepItems, setKeepItems] = useState<KeepItemDto[]>([]);
+  const [activities, setActivities] = useState<ActivityLogDto[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Modals state
+  const [isEventModalOpen, setIsEventModalOpen] = useState(false);
+  const [eventToEdit, setEventToEdit] = useState<EventDto | null>(null);
+  const [initialDateForModal, setInitialDateForModal] = useState<Date>(new Date());
+  const [initialTitleForModal, setInitialTitleForModal] = useState("");
+  const [initialDescForModal, setInitialDescForModal] = useState("");
+
+  const [selectedEvent, setSelectedEvent] = useState<EventDto | null>(null);
+  const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
+  const [calendarToEdit, setCalendarToEdit] = useState<CalendarDto | null>(null);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+
+  // 1. Initial Load: Users
+  useEffect(() => {
+    async function initUsers() {
+      try {
+        const res = await fetch("/api/users");
+        if (res.ok) {
+          const data: UserDto[] = await res.json();
+          setUsers(data);
+          if (data.length > 0) {
+            setCurrentUser(data[0]);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load users:", e);
+      }
+    }
+    initUsers();
+  }, []);
+
+  // 2. Load Calendars when currentUser is set
+  const loadCalendars = useCallback(async () => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch(`/api/calendars?userId=${currentUser.id}`);
+      if (res.ok) {
+        const data: CalendarDto[] = await res.json();
+        setCalendars(data);
+        if (!activeCalendar && data.length > 0) {
+          setActiveCalendar(data[0]);
+        } else if (activeCalendar) {
+          const updated = data.find((c) => c.id === activeCalendar.id);
+          if (updated) setActiveCalendar(updated);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load calendars:", e);
+    }
+  }, [currentUser, activeCalendar]);
+
+  useEffect(() => {
+    loadCalendars();
+  }, [loadCalendars]);
+
+  // 3. Load Events
+  const loadEvents = useCallback(async () => {
+    try {
+      const calParam = activeCalendar ? activeCalendar.id : "all";
+      const userParam = currentUser ? currentUser.id : "";
+      const res = await fetch(`/api/events?calendarId=${calParam}&userId=${userParam}`);
+      if (res.ok) {
+        const data: EventDto[] = await res.json();
+        setEvents(data);
+
+        if (selectedEvent) {
+          const fresh = data.find((e) => e.id === selectedEvent.id);
+          if (fresh) setSelectedEvent(fresh);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load events:", e);
+    }
+  }, [activeCalendar, currentUser, selectedEvent]);
+
+  // 4. Load Keep Items
+  const loadKeepItems = useCallback(async () => {
+    try {
+      const calParam = activeCalendar ? activeCalendar.id : "all";
+      const res = await fetch(`/api/keep?calendarId=${calParam}`);
+      if (res.ok) {
+        const data: KeepItemDto[] = await res.json();
+        setKeepItems(data);
+      }
+    } catch (e) {
+      console.error("Failed to load keep items:", e);
+    }
+  }, [activeCalendar]);
+
+  // 5. Load Activity Logs
+  const loadActivities = useCallback(async () => {
+    try {
+      const calParam = activeCalendar ? activeCalendar.id : "all";
+      const userParam = currentUser ? currentUser.id : "";
+      const res = await fetch(`/api/activities?calendarId=${calParam}&userId=${userParam}`);
+      if (res.ok) {
+        const data: ActivityLogDto[] = await res.json();
+        setActivities(data);
+      }
+    } catch (e) {
+      console.error("Failed to load activities:", e);
+    }
+  }, [activeCalendar, currentUser]);
+
+  useEffect(() => {
+    loadEvents();
+    loadKeepItems();
+    loadActivities();
+    setLoading(false);
+  }, [loadEvents, loadKeepItems, loadActivities]);
+
+  // Date Navigation
+  const handlePrev = () => {
+    if (activeTab === "month") setCurrentDate(subMonths(currentDate, 1));
+    else if (activeTab === "week") setCurrentDate(subWeeks(currentDate, 1));
+    else setCurrentDate(subDays(currentDate, 7));
+  };
+
+  const handleNext = () => {
+    if (activeTab === "month") setCurrentDate(addMonths(currentDate, 1));
+    else if (activeTab === "week") setCurrentDate(addWeeks(currentDate, 1));
+    else setCurrentDate(addDays(currentDate, 7));
+  };
+
+  const handleToday = () => {
+    setCurrentDate(new Date());
+  };
+
+  const handleOpenNewEvent = (targetDate?: Date, initialTitle = "", initialDesc = "") => {
+    setEventToEdit(null);
+    setInitialDateForModal(targetDate || currentDate);
+    setInitialTitleForModal(initialTitle);
+    setInitialDescForModal(initialDesc);
+    setIsEventModalOpen(true);
+  };
+
+  const handleEditEvent = (event: EventDto) => {
+    setSelectedEvent(null);
+    setEventToEdit(event);
+    setIsEventModalOpen(true);
+  };
+
+  const handleSelectEvent = (event: EventDto) => {
+    setSelectedEvent(event);
+  };
+
+  const handleConvertToEvent = (title: string, desc: string) => {
+    handleOpenNewEvent(currentDate, title, desc);
+  };
+
+  const refreshAll = () => {
+    loadCalendars();
+    loadEvents();
+    loadKeepItems();
+    loadActivities();
+  };
+
+  return (
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-100">
+      <Header
+        activeCalendar={activeCalendar}
+        calendars={calendars}
+        onSelectCalendar={(cal) => setActiveCalendar(cal)}
+        currentDate={currentDate}
+        onPrev={handlePrev}
+        onNext={handleNext}
+        onToday={handleToday}
+        activeTab={activeTab}
+        onSelectTab={(tab) => setActiveTab(tab)}
+        currentUser={currentUser}
+        users={users}
+        onSelectUser={(u) => {
+          setCurrentUser(u);
+          refreshAll();
+        }}
+        onOpenNewEvent={() => handleOpenNewEvent()}
+        onOpenInvite={() => setIsInviteModalOpen(true)}
+        onOpenNewCalendar={() => {
+          setCalendarToEdit(null);
+          setIsCalendarModalOpen(true);
+        }}
+        isSidebarOpen={isSidebarOpen}
+        onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+      />
+
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+          calendars={calendars}
+          activeCalendar={activeCalendar}
+          onSelectCalendar={(cal) => setActiveCalendar(cal)}
+          currentDate={currentDate}
+          onSelectDate={(d) => setCurrentDate(d)}
+          onOpenNewCalendar={() => {
+            setCalendarToEdit(null);
+            setIsCalendarModalOpen(true);
+          }}
+          onOpenEditCalendar={(cal) => {
+            setCalendarToEdit(cal);
+            setIsCalendarModalOpen(true);
+          }}
+          currentUser={currentUser}
+        />
+
+        <main className="flex-1 flex flex-col overflow-hidden bg-white">
+          {activeTab === "month" && (
+            <MonthView
+              currentDate={currentDate}
+              events={events}
+              onSelectEvent={handleSelectEvent}
+              onSelectDate={(d) => setCurrentDate(d)}
+              onAddEventOnDate={(d) => handleOpenNewEvent(d)}
+            />
+          )}
+
+          {activeTab === "week" && (
+            <WeekView
+              currentDate={currentDate}
+              events={events}
+              onSelectEvent={handleSelectEvent}
+              onAddEventOnDate={(d) => handleOpenNewEvent(d)}
+            />
+          )}
+
+          {activeTab === "list" && (
+            <ListView
+              events={events}
+              onSelectEvent={handleSelectEvent}
+              onOpenNewEvent={() => handleOpenNewEvent()}
+            />
+          )}
+
+          {activeTab === "keep" && (
+            <KeepView
+              items={keepItems}
+              activeCalendar={activeCalendar}
+              currentUser={currentUser}
+              onRefresh={loadKeepItems}
+              onConvertToEvent={handleConvertToEvent}
+            />
+          )}
+
+          {activeTab === "feed" && (
+            <FeedView
+              activities={activities}
+              onRefresh={loadActivities}
+            />
+          )}
+        </main>
+      </div>
+
+      <EventModal
+        isOpen={isEventModalOpen}
+        onClose={() => setIsEventModalOpen(false)}
+        eventToEdit={eventToEdit}
+        initialDate={initialDateForModal}
+        initialTitle={initialTitleForModal}
+        initialDescription={initialDescForModal}
+        calendars={calendars}
+        activeCalendar={activeCalendar}
+        currentUser={currentUser}
+        onSaved={refreshAll}
+        onDeleted={() => {
+          setSelectedEvent(null);
+          refreshAll();
+        }}
+      />
+
+      <EventDetailDrawer
+        isOpen={!!selectedEvent}
+        onClose={() => setSelectedEvent(null)}
+        event={selectedEvent}
+        currentUser={currentUser}
+        onEdit={handleEditEvent}
+        onDeleted={() => {
+          setSelectedEvent(null);
+          refreshAll();
+        }}
+      />
+
+      <CalendarModal
+        isOpen={isCalendarModalOpen}
+        onClose={() => setIsCalendarModalOpen(false)}
+        calendarToEdit={calendarToEdit}
+        currentUser={currentUser}
+        onSaved={refreshAll}
+        onDeleted={(deletedId) => {
+          if (activeCalendar?.id === deletedId) {
+            setActiveCalendar(null);
+          }
+          refreshAll();
+        }}
+      />
+
+      <InviteModal
+        isOpen={isInviteModalOpen}
+        onClose={() => setIsInviteModalOpen(false)}
+        calendar={activeCalendar}
+      />
+    </div>
+  );
+}
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <Suspense
+      fallback={
+        <div className="h-screen w-screen bg-slate-100 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      }
+    >
+      <CalendarApp />
+    </Suspense>
   );
 }

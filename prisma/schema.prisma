@@ -1,0 +1,160 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  avatarUrl String?
+  color     String?  @default("#10B981")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  calendarMembers   CalendarMember[]
+  createdEvents     Event[]             @relation("EventCreator")
+  eventParticipants EventParticipant[]
+  comments          EventComment[]
+  keepItems         KeepItem[]
+  activities        ActivityLog[]
+}
+
+model Calendar {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  color          String   @default("#10B981") // Default TimeTree emerald/mint green
+  coverImageUrl  String?
+  timezone       String   @default("Asia/Seoul")
+  firstDayOfWeek Int      @default(0) // 0: Sunday, 1: Monday
+  inviteCode     String   @unique @default(cuid())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  members        CalendarMember[]
+  events         Event[]
+  labels         Label[]
+  keepItems      KeepItem[]
+  activities     ActivityLog[]
+}
+
+model CalendarMember {
+  id         String   @id @default(cuid())
+  calendarId String
+  userId     String
+  role       String   @default("MEMBER") // OWNER, ADMIN, MEMBER, VIEWER
+  joinedAt   DateTime @default(now())
+
+  calendar   Calendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([calendarId, userId])
+}
+
+model Label {
+  id         String   @id @default(cuid())
+  calendarId String
+  name       String
+  colorHex   String
+  orderIndex Int      @default(0)
+
+  calendar   Calendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  events     Event[]
+}
+
+model Event {
+  id                 String   @id @default(cuid())
+  calendarId         String
+  creatorId          String
+  labelId            String?
+  title              String
+  description        String?
+  location           String?
+  url                String?
+  isAllDay           Boolean  @default(false)
+  startAt            DateTime
+  endAt              DateTime
+  recurrenceRule     String?  // RFC 5545 RRULE string
+  recurrenceParentId String?  // Parent ID if this is an exception
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  calendar           Calendar           @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  creator            User               @relation("EventCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  label              Label?             @relation(fields: [labelId], references: [id], onDelete: SetNull)
+  participants       EventParticipant[]
+  comments           EventComment[]
+  attachments        EventAttachment[]
+
+  @@index([calendarId, startAt])
+}
+
+model EventParticipant {
+  id        String   @id @default(cuid())
+  eventId   String
+  userId    String
+
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+}
+
+model EventComment {
+  id        String   @id @default(cuid())
+  eventId   String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EventAttachment {
+  id        String   @id @default(cuid())
+  eventId   String
+  fileUrl   String
+  fileName  String
+  fileType  String
+  createdAt DateTime @default(now())
+
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+}
+
+model KeepItem {
+  id          String   @id @default(cuid())
+  calendarId  String
+  creatorId   String
+  title       String
+  content     String?  // Text content or JSON for checklist
+  isChecklist Boolean  @default(false)
+  isCompleted Boolean  @default(false)
+  color       String?  @default("#F3F4F6")
+  orderIndex  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  calendar    Calendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  creator     User     @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+}
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  calendarId  String
+  userId      String
+  action      String   // CREATED_EVENT, UPDATED_EVENT, DELETED_EVENT, COMMENTED, CREATED_KEEP
+  targetTitle String
+  details     String?  // JSON string
+  createdAt   DateTime @default(now())
+
+  calendar    Calendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([calendarId, createdAt])
+}
