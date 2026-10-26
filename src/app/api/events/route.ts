@@ -55,6 +55,7 @@ export async function GET(req: Request) {
         participants: {
           include: { user: true },
         },
+        attachments: true,
         _count: {
           select: { comments: true },
         },
@@ -85,6 +86,7 @@ export async function POST(req: Request) {
       endAt,
       recurrenceRule,
       participantIds = [],
+      attachments = [],
     } = body;
 
     if (!calendarId || !creatorId || !title || !startAt || !endAt) {
@@ -110,12 +112,20 @@ export async function POST(req: Request) {
         participants: {
           create: participantIds.map((userId: string) => ({ userId })),
         },
+        attachments: {
+          create: attachments.map((att: any) => ({
+            fileUrl: att.fileUrl || att.url,
+            fileName: att.fileName || "image.jpg",
+            fileType: att.fileType || "image/jpeg",
+          })),
+        },
       },
       include: {
         label: true,
         creator: true,
         calendar: { select: { id: true, name: true, color: true } },
         participants: { include: { user: true } },
+        attachments: true,
         _count: { select: { comments: true } },
       },
     });

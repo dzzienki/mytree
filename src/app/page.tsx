@@ -60,6 +60,11 @@ function CalendarApp() {
       }
     }
     initUsers();
+
+    // Register PWA Service Worker
+    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
   }, []);
 
   // 2. Load Calendars when currentUser is set
@@ -234,6 +239,8 @@ function CalendarApp() {
             setIsCalendarModalOpen(true);
           }}
           currentUser={currentUser}
+          events={events}
+          onSelectEvent={handleSelectEvent}
         />
 
         <main className="flex-1 flex flex-col overflow-hidden bg-white">

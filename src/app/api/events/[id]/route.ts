@@ -14,6 +14,7 @@ export async function GET(
         creator: true,
         calendar: { select: { id: true, name: true, color: true } },
         participants: { include: { user: true } },
+        attachments: true,
         comments: {
           include: { user: true },
           orderBy: { createdAt: "asc" },
@@ -50,8 +51,26 @@ export async function PUT(
       endAt,
       recurrenceRule,
       participantIds,
+      attachments,
       updaterId,
     } = body;
+
+    // If attachments provided, update relation
+    if (attachments !== undefined) {
+      await prisma.eventAttachment.deleteMany({
+        where: { eventId: id },
+      });
+      if (attachments.length > 0) {
+        await prisma.eventAttachment.createMany({
+          data: attachments.map((att: any) => ({
+            eventId: id,
+            fileUrl: att.fileUrl || att.url,
+            fileName: att.fileName || "image.jpg",
+            fileType: att.fileType || "image/jpeg",
+          })),
+        });
+      }
+    }
 
     // If participantIds provided, update relation
     if (participantIds !== undefined) {
@@ -86,6 +105,7 @@ export async function PUT(
         creator: true,
         calendar: { select: { id: true, name: true, color: true } },
         participants: { include: { user: true } },
+        attachments: true,
         comments: {
           include: { user: true },
           orderBy: { createdAt: "asc" },

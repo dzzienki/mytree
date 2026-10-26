@@ -10,6 +10,9 @@ import {
   Sparkles,
   ChevronRight,
   FolderPlus,
+  Bell,
+  BellRing,
+  Clock,
 } from "lucide-react";
 import {
   format,
@@ -24,7 +27,9 @@ import {
   subMonths,
 } from "date-fns";
 import { ko } from "date-fns/locale";
-import { CalendarDto, UserDto } from "@/types";
+import { CalendarDto, UserDto, EventDto } from "@/types";
+import { calculateDDay } from "@/lib/holidays";
+import { requestNotificationPermission, sendLocalNotification } from "@/lib/notifications";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -37,6 +42,8 @@ interface SidebarProps {
   onOpenNewCalendar: () => void;
   onOpenEditCalendar: (calendar: CalendarDto) => void;
   currentUser: UserDto | null;
+  events?: EventDto[];
+  onSelectEvent?: (event: EventDto) => void;
 }
 
 export default function Sidebar({
@@ -50,7 +57,27 @@ export default function Sidebar({
   onOpenNewCalendar,
   onOpenEditCalendar,
   currentUser,
+  events = [],
+  onSelectEvent,
 }: SidebarProps) {
+  const [notificationEnabled, setNotificationEnabled] = React.useState(false);
+
+  React.useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      setNotificationEnabled(Notification.permission === "granted");
+    }
+  }, []);
+
+  const handleToggleNotification = async () => {
+    const granted = await requestNotificationPermission();
+    setNotificationEnabled(granted);
+    if (granted) {
+      sendLocalNotification("🔔 mytree 알림이 켜졌습니다!", {
+        body: "새 일정이나 댓글이 등록되면 브라우저/스마트폰으로 알려드립니다.",
+      });
+    }
+  };
+
   if (!isOpen) return null;
 
   // Mini Calendar logic
@@ -178,6 +205,82 @@ export default function Sidebar({
               </div>
             );
           })}
+        </div>
+
+        {/* D-Day 위젯 Section */}
+        {events.length > 0 && (
+          <div className="mt-5 pt-3 border-t border-slate-100 px-2">
+            <div className="flex items-center space-x-1 mb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span>다가오는 D-Day</span>
+            </div>
+            <div className="space-y-1.5">
+              {events
+                .filter((ev) => new Date(ev.startAt).getTime() >= new Date().setHours(0, 0, 0, 0))
+                .slice(0, 3)
+                .map((ev) => {
+                  const dday = calculateDDay(new Date(ev.startAt));
+                  const labelColor = ev.label?.colorHex || ev.calendar?.color || "#10B981";
+
+                  return (
+                    <div
+                      key={ev.id}
+                      onClick={() => onSelectEvent && onSelectEvent(ev)}
+                      className="flex items-center justify-between p-2 rounded-xl bg-slate-50 hover:bg-slate-100/80 cursor-pointer text-xs transition-colors"
+                    >
+                      <div className="flex items-center space-x-2 truncate">
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: labelColor }}
+                        />
+                        <span className="truncate font-medium text-slate-800">{ev.title}</span>
+                      </div>
+                      <span
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0 ml-1.5 ${
+                          dday.days === 0
+                            ? "bg-rose-500 text-white animate-pulse"
+                            : dday.days <= 3
+                            ? "bg-amber-100 text-amber-800"
+                            : "bg-slate-200 text-slate-700"
+                        }`}
+                      >
+                        {dday.label}
+                      </span>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+
+        {/* Browser Notification Banner */}
+        <div className="mt-4 px-2">
+          <button
+            onClick={handleToggleNotification}
+            className={`w-full flex items-center justify-between p-2.5 rounded-xl border text-xs font-medium transition-all ${
+              notificationEnabled
+                ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            <div className="flex items-center space-x-2">
+              {notificationEnabled ? (
+                <BellRing className="w-4 h-4 text-emerald-600" />
+              ) : (
+                <Bell className="w-4 h-4 text-slate-400" />
+              )}
+              <span className="font-semibold text-[11px]">
+                {notificationEnabled ? "스마트폰 알림 켜짐" : "알림 받기"}
+              </span>
+            </div>
+            <span
+              className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                notificationEnabled ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-700"
+              }`}
+            >
+              {notificationEnabled ? "ON" : "설정"}
+            </span>
+          </button>
         </div>
       </div>
 

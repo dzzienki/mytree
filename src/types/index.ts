@@ -39,6 +39,15 @@ export interface CalendarDto {
   };
 }
 
+export interface EventAttachmentDto {
+  id: string;
+  eventId: string;
+  fileUrl: string;
+  fileName: string;
+  fileType: string;
+  createdAt: string;
+}
+
 export interface EventCommentDto {
   id: string;
   eventId: string;
@@ -77,8 +86,10 @@ export interface EventDto {
     user: UserDto;
   }[];
   comments?: EventCommentDto[];
+  attachments?: EventAttachmentDto[];
   _count?: {
     comments: number;
+    attachments?: number;
   };
 }
 

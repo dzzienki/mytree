@@ -15,8 +15,9 @@ import {
   endOfDay,
 } from "date-fns";
 import { ko } from "date-fns/locale";
-import { MessageSquare, Clock, MapPin } from "lucide-react";
+import { MessageSquare, Clock, MapPin, Image as ImageIcon } from "lucide-react";
 import { EventDto } from "@/types";
+import { getHoliday } from "@/lib/holidays";
 
 interface MonthViewProps {
   currentDate: Date;
@@ -81,6 +82,8 @@ export default function MonthView({
           const dayEvents = getEventsForDay(day);
           const isSunday = day.getDay() === 0;
           const isSaturday = day.getDay() === 6;
+          const holiday = getHoliday(day);
+          const isRedDay = isSunday || !!holiday?.isHoliday;
 
           return (
             <div
@@ -91,22 +94,30 @@ export default function MonthView({
                 !isCurrentMonth ? "bg-slate-50/40 text-slate-400" : "bg-white text-slate-800"
               } ${isSelected ? "bg-emerald-50/20" : ""} hover:bg-slate-50/80`}
             >
-              {/* Day Header (Number & Quick Add Button) */}
+              {/* Day Header (Number, Holiday Name & Quick Add Button) */}
               <div className="flex items-center justify-between mb-1">
-                <div
-                  className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-medium transition-all ${
-                    isToday
-                      ? "bg-emerald-500 text-white font-bold shadow-xs"
-                      : isSunday
-                      ? "text-rose-500"
-                      : isSaturday
-                      ? "text-sky-500"
-                      : !isCurrentMonth
-                      ? "text-slate-300"
-                      : "text-slate-700"
-                  }`}
-                >
-                  {format(day, "d")}
+                <div className="flex items-center space-x-1 truncate">
+                  <div
+                    className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-medium transition-all ${
+                      isToday
+                        ? "bg-emerald-500 text-white font-bold shadow-xs"
+                        : isRedDay
+                        ? "text-rose-500 font-semibold"
+                        : isSaturday
+                        ? "text-sky-500 font-semibold"
+                        : !isCurrentMonth
+                        ? "text-slate-300"
+                        : "text-slate-700"
+                    }`}
+                  >
+                    {format(day, "d")}
+                  </div>
+
+                  {holiday && isCurrentMonth && (
+                    <span className="text-[10px] text-rose-500 font-medium truncate max-w-[65px] hidden sm:inline">
+                      {holiday.name}
+                    </span>
+                  )}
                 </div>
 
                 <button
@@ -150,17 +161,30 @@ export default function MonthView({
                         <span className="truncate">{ev.title}</span>
                       </div>
 
-                      {/* Comments badge if any */}
-                      {commentCount > 0 && (
-                        <div
-                          className={`flex items-center space-x-0.5 text-[9px] ml-1 shrink-0 px-1 rounded-full ${
-                            ev.isAllDay ? "bg-black/20 text-white" : "bg-white/80 text-slate-700"
-                          }`}
-                        >
-                          <MessageSquare className="w-2.5 h-2.5" />
-                          <span>{commentCount}</span>
-                        </div>
-                      )}
+                      {/* Attachments & Comments badges */}
+                      <div className="flex items-center space-x-0.5 shrink-0 ml-1">
+                        {ev.attachments && ev.attachments.length > 0 && (
+                          <div
+                            className={`flex items-center text-[9px] px-0.5 rounded-full ${
+                              ev.isAllDay ? "bg-black/20 text-white" : "bg-white/80 text-slate-700"
+                            }`}
+                            title={`사진 ${ev.attachments.length}장 첨부됨`}
+                          >
+                            <ImageIcon className="w-2.5 h-2.5" />
+                          </div>
+                        )}
+
+                        {commentCount > 0 && (
+                          <div
+                            className={`flex items-center space-x-0.5 text-[9px] px-1 rounded-full ${
+                              ev.isAllDay ? "bg-black/20 text-white" : "bg-white/80 text-slate-700"
+                            }`}
+                          >
+                            <MessageSquare className="w-2.5 h-2.5" />
+                            <span>{commentCount}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}

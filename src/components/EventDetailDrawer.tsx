@@ -15,6 +15,7 @@ import {
   Send,
   Calendar,
   Share2,
+  Image as ImageIcon,
 } from "lucide-react";
 import { EventDto, EventCommentDto, UserDto } from "@/types";
 
@@ -38,6 +39,7 @@ export default function EventDetailDrawer({
   const [commentText, setCommentText] = useState("");
   const [comments, setComments] = useState<EventCommentDto[]>([]);
   const [loadingComment, setLoadingComment] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (event?.comments) {
@@ -213,6 +215,31 @@ export default function EventDetailDrawer({
               </div>
             )}
 
+            {/* Photo Attachments Gallery */}
+            {event.attachments && event.attachments.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center space-x-1.5 text-xs font-bold text-slate-700">
+                  <ImageIcon className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>첨부된 사진 ({event.attachments.length}장)</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {event.attachments.map((att) => (
+                    <div
+                      key={att.id}
+                      onClick={() => setPreviewImageUrl(att.fileUrl)}
+                      className="aspect-square rounded-xl overflow-hidden border border-slate-200 cursor-pointer hover:opacity-90 hover:scale-[1.02] transition-all shadow-2xs"
+                    >
+                      <img
+                        src={att.fileUrl}
+                        alt={att.fileName}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Attendees / Participants */}
             {event.participants && event.participants.length > 0 && (
               <div className="space-y-2 border-t border-slate-100 pt-4">
@@ -304,6 +331,26 @@ export default function EventDetailDrawer({
           </form>
         </div>
       </div>
+
+      {/* Fullscreen Image Lightbox Modal */}
+      {previewImageUrl && (
+        <div
+          className="fixed inset-0 z-60 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setPreviewImageUrl(null)}
+        >
+          <button
+            onClick={() => setPreviewImageUrl(null)}
+            className="absolute top-4 right-4 p-2 text-white/80 hover:text-white bg-black/40 rounded-full"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <img
+            src={previewImageUrl}
+            alt="첨부 이미지 확대"
+            className="max-w-full max-h-[85vh] rounded-xl object-contain shadow-2xl"
+          />
+        </div>
+      )}
     </div>
   );
 }
