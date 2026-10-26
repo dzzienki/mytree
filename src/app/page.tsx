@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, Suspense } from "react";
+import React, { useState, useEffect, useCallback, Suspense, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
@@ -19,25 +19,27 @@ import { CalendarDto, EventDto, KeepItemDto, ActivityLogDto, UserDto } from "@/t
 function CalendarApp() {
   const router = useRouter();
 
-  // Navigation & State
-  const [currentDate, setCurrentDate] = useState<Date>(new Date());
+  // Navigation & View State
+  const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
   const [activeTab, setActiveTab] = useState<"month" | "week" | "list" | "keep" | "feed">("month");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-  // Data
-  const [users, setUsers] = useState<UserDto[]>([]);
+  // Auth & User State
   const [currentUser, setCurrentUser] = useState<UserDto | null>(null);
+  const [users, setUsers] = useState<UserDto[]>([]);
+  const [authChecking, setAuthChecking] = useState(true);
+
+  // Calendar Data State
   const [calendars, setCalendars] = useState<CalendarDto[]>([]);
-  const [activeCalendar, setActiveCalendar] = useState<CalendarDto | null>(null);
+  const [activeCalendarId, setActiveCalendarId] = useState<string | null>(null);
   const [events, setEvents] = useState<EventDto[]>([]);
   const [keepItems, setKeepItems] = useState<KeepItemDto[]>([]);
   const [activities, setActivities] = useState<ActivityLogDto[]>([]);
-  const [authChecking, setAuthChecking] = useState(true);
 
   // Modals state
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [eventToEdit, setEventToEdit] = useState<EventDto | null>(null);
-  const [initialDateForModal, setInitialDateForModal] = useState<Date>(new Date());
+  const [initialDateForModal, setInitialDateForModal] = useState<Date>(() => new Date());
   const [initialTitleForModal, setInitialTitleForModal] = useState("");
   const [initialDescForModal, setInitialDescForModal] = useState("");
 
@@ -46,8 +48,16 @@ function CalendarApp() {
   const [calendarToEdit, setCalendarToEdit] = useState<CalendarDto | null>(null);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
 
-  // 1. Initial Load: Check Auth Session
+  // Derived active calendar object (NO state loop!)
+  const activeCalendar = useMemo(() => {
+    if (!activeCalendarId) return null;
+    return calendars.find((c) => c.id === activeCalendarId) || null;
+  }, [calendars, activeCalendarId]);
+
+  // 1. Initial Load: Auth check and users fetch (Runs ONCE on mount)
   useEffect(() => {
+    let isMounted = true;
+
     async function checkAuthAndInit() {
       try {
         const authRes = await fetch("/api/auth/me");
@@ -58,19 +68,21 @@ function CalendarApp() {
           return;
         }
 
-        setCurrentUser(authData.user);
+        if (isMounted) {
+          setCurrentUser(authData.user);
 
-        // Fetch other users for team member assignments
-        const usersRes = await fetch("/api/users");
-        if (usersRes.ok) {
-          const uData: UserDto[] = await usersRes.json();
-          setUsers(uData);
+          // Fetch other users for team member assignments
+          const usersRes = await fetch("/api/users");
+          if (usersRes.ok) {
+            const uData: UserDto[] = await usersRes.json();
+            setUsers(uData);
+          }
         }
       } catch (e) {
         console.error("Auth check failed:", e);
         router.push("/login");
       } finally {
-        setAuthChecking(false);
+        if (isMounted) setAuthChecking(false);
       }
     }
 
@@ -80,88 +92,77 @@ function CalendarApp() {
     if (typeof window !== "undefined" && "serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
+
+    return () => {
+      isMounted = false;
+    };
   }, [router]);
 
-  // 2. Load Calendars when currentUser is set
-  const loadCalendars = useCallback(async () => {
-    if (!currentUser) return;
+  // 2. Load Calendars when currentUser is determined
+  const loadCalendars = useCallback(async (userId: string) => {
     try {
-      const res = await fetch(`/api/calendars?userId=${currentUser.id}`);
+      const res = await fetch(`/api/calendars?userId=${userId}`);
       if (res.ok) {
         const data: CalendarDto[] = await res.json();
         setCalendars(data);
-        if (!activeCalendar && data.length > 0) {
-          setActiveCalendar(data[0]);
-        } else if (activeCalendar) {
-          const updated = data.find((c) => c.id === activeCalendar.id);
-          if (updated) setActiveCalendar(updated);
-        }
+        setActiveCalendarId((prevId) => {
+          if (prevId && data.some((c) => c.id === prevId)) return prevId;
+          return data[0]?.id || null;
+        });
       }
     } catch (e) {
       console.error("Failed to load calendars:", e);
     }
-  }, [currentUser, activeCalendar]);
+  }, []);
 
   useEffect(() => {
-    loadCalendars();
-  }, [loadCalendars]);
+    if (currentUser?.id) {
+      loadCalendars(currentUser.id);
+    }
+  }, [currentUser?.id, loadCalendars]);
 
-  // 3. Load Events
-  const loadEvents = useCallback(async () => {
+  // 3. Load Events, Keep, and Activities in parallel (Only when activeCalendarId or user changes)
+  const loadCalendarData = useCallback(async (calId: string | null, userId: string) => {
     try {
-      const calParam = activeCalendar ? activeCalendar.id : "all";
-      const userParam = currentUser ? currentUser.id : "";
-      const res = await fetch(`/api/events?calendarId=${calParam}&userId=${userParam}`);
-      if (res.ok) {
-        const data: EventDto[] = await res.json();
-        setEvents(data);
+      const calParam = calId || "all";
+      const [eventsRes, keepRes, actRes] = await Promise.all([
+        fetch(`/api/events?calendarId=${calParam}&userId=${userId}`),
+        fetch(`/api/keep?calendarId=${calParam}`),
+        fetch(`/api/activities?calendarId=${calParam}&userId=${userId}`),
+      ]);
 
-        if (selectedEvent) {
-          const fresh = data.find((e) => e.id === selectedEvent.id);
-          if (fresh) setSelectedEvent(fresh);
-        }
+      if (eventsRes.ok) {
+        const evData: EventDto[] = await eventsRes.json();
+        setEvents(evData);
+      }
+      if (keepRes.ok) {
+        const kpData: KeepItemDto[] = await keepRes.json();
+        setKeepItems(kpData);
+      }
+      if (actRes.ok) {
+        const actData: ActivityLogDto[] = await actRes.json();
+        setActivities(actData);
       }
     } catch (e) {
-      console.error("Failed to load events:", e);
+      console.error("Failed to load calendar data:", e);
     }
-  }, [activeCalendar, currentUser, selectedEvent]);
-
-  // 4. Load Keep Items
-  const loadKeepItems = useCallback(async () => {
-    try {
-      const calParam = activeCalendar ? activeCalendar.id : "all";
-      const res = await fetch(`/api/keep?calendarId=${calParam}`);
-      if (res.ok) {
-        const data: KeepItemDto[] = await res.json();
-        setKeepItems(data);
-      }
-    } catch (e) {
-      console.error("Failed to load keep items:", e);
-    }
-  }, [activeCalendar]);
-
-  // 5. Load Activity Logs
-  const loadActivities = useCallback(async () => {
-    try {
-      const calParam = activeCalendar ? activeCalendar.id : "all";
-      const userParam = currentUser ? currentUser.id : "";
-      const res = await fetch(`/api/activities?calendarId=${calParam}&userId=${userParam}`);
-      if (res.ok) {
-        const data: ActivityLogDto[] = await res.json();
-        setActivities(data);
-      }
-    } catch (e) {
-      console.error("Failed to load activities:", e);
-    }
-  }, [activeCalendar, currentUser]);
+  }, []);
 
   useEffect(() => {
-    loadEvents();
-    loadKeepItems();
-    loadActivities();
-  }, [loadEvents, loadKeepItems, loadActivities]);
+    if (currentUser?.id) {
+      loadCalendarData(activeCalendarId, currentUser.id);
+    }
+  }, [currentUser?.id, activeCalendarId, loadCalendarData]);
 
-  // Date Navigation
+  // Synchronize selectedEvent if it was updated
+  useEffect(() => {
+    if (selectedEvent) {
+      const fresh = events.find((e) => e.id === selectedEvent.id);
+      if (fresh) setSelectedEvent(fresh);
+    }
+  }, [events]);
+
+  // Date Navigation Handlers
   const handlePrev = () => {
     if (activeTab === "month") setCurrentDate(subMonths(currentDate, 1));
     else if (activeTab === "week") setCurrentDate(subWeeks(currentDate, 1));
@@ -201,10 +202,10 @@ function CalendarApp() {
   };
 
   const refreshAll = () => {
-    loadCalendars();
-    loadEvents();
-    loadKeepItems();
-    loadActivities();
+    if (currentUser?.id) {
+      loadCalendars(currentUser.id);
+      loadCalendarData(activeCalendarId, currentUser.id);
+    }
   };
 
   if (authChecking || !currentUser) {
@@ -217,10 +218,11 @@ function CalendarApp() {
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-100">
+      {/* Top Header */}
       <Header
         activeCalendar={activeCalendar}
         calendars={calendars}
-        onSelectCalendar={(cal) => setActiveCalendar(cal)}
+        onSelectCalendar={(cal) => setActiveCalendarId(cal?.id || null)}
         currentDate={currentDate}
         onPrev={handlePrev}
         onNext={handleNext}
@@ -231,7 +233,6 @@ function CalendarApp() {
         users={users}
         onSelectUser={(u) => {
           setCurrentUser(u);
-          refreshAll();
         }}
         onOpenNewEvent={() => handleOpenNewEvent()}
         onOpenInvite={() => setIsInviteModalOpen(true)}
@@ -243,13 +244,15 @@ function CalendarApp() {
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
       />
 
+      {/* Main Layout Area */}
       <div className="flex flex-1 overflow-hidden">
+        {/* Left Sidebar */}
         <Sidebar
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
           calendars={calendars}
           activeCalendar={activeCalendar}
-          onSelectCalendar={(cal) => setActiveCalendar(cal)}
+          onSelectCalendar={(cal) => setActiveCalendarId(cal?.id || null)}
           currentDate={currentDate}
           onSelectDate={(d) => setCurrentDate(d)}
           onOpenNewCalendar={() => {
@@ -265,6 +268,7 @@ function CalendarApp() {
           onSelectEvent={handleSelectEvent}
         />
 
+        {/* View Main Content Area */}
         <main className="flex-1 flex flex-col overflow-hidden bg-white">
           {activeTab === "month" && (
             <MonthView
@@ -298,7 +302,7 @@ function CalendarApp() {
               items={keepItems}
               activeCalendar={activeCalendar}
               currentUser={currentUser}
-              onRefresh={loadKeepItems}
+              onRefresh={() => currentUser?.id && loadCalendarData(activeCalendarId, currentUser.id)}
               onConvertToEvent={handleConvertToEvent}
             />
           )}
@@ -306,12 +310,13 @@ function CalendarApp() {
           {activeTab === "feed" && (
             <FeedView
               activities={activities}
-              onRefresh={loadActivities}
+              onRefresh={() => currentUser?.id && loadCalendarData(activeCalendarId, currentUser.id)}
             />
           )}
         </main>
       </div>
 
+      {/* Event Add/Edit Modal */}
       <EventModal
         isOpen={isEventModalOpen}
         onClose={() => setIsEventModalOpen(false)}
@@ -329,6 +334,7 @@ function CalendarApp() {
         }}
       />
 
+      {/* Event Detail & Comments Drawer */}
       <EventDetailDrawer
         isOpen={!!selectedEvent}
         onClose={() => setSelectedEvent(null)}
@@ -341,6 +347,7 @@ function CalendarApp() {
         }}
       />
 
+      {/* Calendar Add/Edit Modal */}
       <CalendarModal
         isOpen={isCalendarModalOpen}
         onClose={() => setIsCalendarModalOpen(false)}
@@ -348,13 +355,14 @@ function CalendarApp() {
         currentUser={currentUser}
         onSaved={refreshAll}
         onDeleted={(deletedId) => {
-          if (activeCalendar?.id === deletedId) {
-            setActiveCalendar(null);
+          if (activeCalendarId === deletedId) {
+            setActiveCalendarId(null);
           }
           refreshAll();
         }}
       />
 
+      {/* Invite Modal */}
       <InviteModal
         isOpen={isInviteModalOpen}
         onClose={() => setIsInviteModalOpen(false)}
