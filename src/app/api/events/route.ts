@@ -56,6 +56,10 @@ export async function GET(req: Request) {
           include: { user: true },
         },
         attachments: true,
+        comments: {
+          include: { user: true },
+          orderBy: { createdAt: "asc" },
+        },
         _count: {
           select: { comments: true },
         },

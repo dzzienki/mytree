@@ -26,6 +26,7 @@ interface EventDetailDrawerProps {
   currentUser: UserDto | null;
   onEdit: (event: EventDto) => void;
   onDeleted: (id: string) => void;
+  onCommentAdded?: () => void;
 }
 
 export default function EventDetailDrawer({
@@ -35,6 +36,7 @@ export default function EventDetailDrawer({
   currentUser,
   onEdit,
   onDeleted,
+  onCommentAdded,
 }: EventDetailDrawerProps) {
   const [commentText, setCommentText] = useState("");
   const [comments, setComments] = useState<EventCommentDto[]>([]);
@@ -42,12 +44,21 @@ export default function EventDetailDrawer({
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (event?.comments) {
-      setComments(event.comments);
-    } else {
-      setComments([]);
+    if (event?.id && isOpen) {
+      if (event.comments && event.comments.length > 0) {
+        setComments(event.comments);
+      }
+      // Always fetch latest comments from server
+      fetch(`/api/events/${event.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && data.comments) {
+            setComments(data.comments);
+          }
+        })
+        .catch(console.error);
     }
-  }, [event]);
+  }, [event?.id, isOpen]);
 
   if (!isOpen || !event) return null;
 
@@ -72,8 +83,9 @@ export default function EventDetailDrawer({
 
       if (res.ok) {
         const newComment = await res.json();
-        setComments([...comments, newComment]);
+        setComments((prev) => [...prev, newComment]);
         setCommentText("");
+        if (onCommentAdded) onCommentAdded();
       }
     } catch (err) {
       console.error(err);

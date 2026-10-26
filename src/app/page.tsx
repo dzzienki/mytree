@@ -345,6 +345,7 @@ function CalendarApp() {
           setSelectedEvent(null);
           refreshAll();
         }}
+        onCommentAdded={refreshAll}
       />
 
       {/* Calendar Add/Edit Modal */}
