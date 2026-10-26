@@ -13,6 +13,7 @@ import {
   Bell,
   BellRing,
   Clock,
+  LogOut,
 } from "lucide-react";
 import {
   format,
@@ -284,9 +285,9 @@ export default function Sidebar({
         </div>
       </div>
 
-      {/* Footer Info */}
-      <div className="p-3 border-t border-slate-100 bg-slate-50/50">
-        <div className="flex items-center space-x-2 px-2 py-1.5">
+      {/* Footer Info & Logout */}
+      <div className="p-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
+        <div className="flex items-center space-x-2 px-1 py-1 min-w-0">
           <div
             className="w-7 h-7 rounded-full flex items-center justify-center text-xs text-white font-bold shrink-0"
             style={{ backgroundColor: currentUser?.color || "#10B981" }}
@@ -302,6 +303,17 @@ export default function Sidebar({
             <p className="text-[10px] text-slate-400 truncate">{currentUser?.email}</p>
           </div>
         </div>
+
+        <button
+          onClick={async () => {
+            await fetch("/api/auth/logout", { method: "POST" });
+            window.location.href = "/login";
+          }}
+          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0"
+          title="로그아웃"
+        >
+          <LogOut className="w-4 h-4" />
+        </button>
       </div>
     </aside>
   );

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Calendar, Users, CheckCircle, ArrowRight, Sparkles } from "lucide-react";
+import { Calendar, Users, ArrowRight, Sparkles, Lock, Mail, User as UserIcon } from "lucide-react";
 import Link from "next/link";
 import { UserDto } from "@/types";
 
@@ -12,11 +12,10 @@ function InviteContent() {
   const code = params?.code as string;
 
   const [calendar, setCalendar] = useState<any>(null);
-  const [users, setUsers] = useState<UserDto[]>([]);
-  const [selectedUserId, setSelectedUserId] = useState<string>("");
-  const [newUserName, setNewUserName] = useState("");
-  const [newUserEmail, setNewUserEmail] = useState("");
-  const [isCreatingNew, setIsCreatingNew] = useState(false);
+  const [currentUser, setCurrentUser] = useState<UserDto | null>(null);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState("");
@@ -25,7 +24,7 @@ function InviteContent() {
     async function loadData() {
       try {
         setLoading(true);
-        // Fetch invite info
+        // 1. Fetch invite info
         const calRes = await fetch(`/api/invite/${code}`);
         if (!calRes.ok) {
           setError("유효하지 않거나 만료된 초대 링크입니다.");
@@ -34,13 +33,12 @@ function InviteContent() {
         const calData = await calRes.json();
         setCalendar(calData);
 
-        // Fetch users
-        const usersRes = await fetch("/api/users");
-        if (usersRes.ok) {
-          const uData = await usersRes.json();
-          setUsers(uData);
-          if (uData.length > 0) {
-            setSelectedUserId(uData[0].id);
+        // 2. Check if already logged in
+        const authRes = await fetch("/api/auth/me");
+        if (authRes.ok) {
+          const authData = await authRes.json();
+          if (authData.user) {
+            setCurrentUser(authData.user);
           }
         }
       } catch (err) {
@@ -55,45 +53,17 @@ function InviteContent() {
     }
   }, [code]);
 
-  const handleJoin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // If already logged in, join with current user
+  const handleJoinExisting = async () => {
+    if (!currentUser) return;
     setJoining(true);
     setError("");
 
     try {
-      let targetUserId = selectedUserId;
-
-      if (isCreatingNew) {
-        if (!newUserName.trim() || !newUserEmail.trim()) {
-          setError("이름과 이메일을 입력해 주세요.");
-          setJoining(false);
-          return;
-        }
-
-        const createRes = await fetch("/api/users", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: newUserName.trim(),
-            email: newUserEmail.trim(),
-            color: "#3B82F6",
-          }),
-        });
-
-        if (!createRes.ok) {
-          setError("새 사용자 생성에 실패했습니다.");
-          setJoining(false);
-          return;
-        }
-
-        const newUser = await createRes.json();
-        targetUserId = newUser.id;
-      }
-
       const joinRes = await fetch(`/api/invite/${code}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: targetUserId }),
+        body: JSON.stringify({ userId: currentUser.id }),
       });
 
       if (!joinRes.ok) {
@@ -103,6 +73,41 @@ function InviteContent() {
       }
 
       router.push("/");
+      router.refresh();
+    } catch (err) {
+      setError("오류가 발생했습니다.");
+      setJoining(false);
+    }
+  };
+
+  // If not logged in, signup with inviteCode directly
+  const handleSignupAndJoin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setJoining(true);
+    setError("");
+
+    try {
+      const signupRes = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          password,
+          inviteCode: code,
+        }),
+      });
+
+      const data = await signupRes.json();
+
+      if (!signupRes.ok) {
+        setError(data.error || "가입 및 참여에 실패했습니다.");
+        setJoining(false);
+        return;
+      }
+
+      router.push("/");
+      router.refresh();
     } catch (err) {
       setError("오류가 발생했습니다.");
       setJoining(false);
@@ -139,7 +144,7 @@ function InviteContent() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl max-w-md w-full shadow-xl border border-slate-200/80 overflow-hidden">
+      <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200/80 overflow-hidden">
         {/* Banner */}
         <div
           className="p-6 text-white text-center relative overflow-hidden"
@@ -160,86 +165,124 @@ function InviteContent() {
           </div>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleJoin} className="p-6 space-y-5">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-2">
-              어떤 사용자로 참여하시겠습니까?
-            </label>
-
-            {!isCreatingNew ? (
-              <div className="space-y-2">
-                <select
-                  value={selectedUserId}
-                  onChange={(e) => setSelectedUserId(e.target.value)}
-                  className="w-full px-3 py-2.5 text-xs font-semibold rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-emerald-500"
+        {/* Content based on login state */}
+        <div className="p-6">
+          {currentUser ? (
+            /* Logged in User view */
+            <div className="space-y-4 text-center">
+              <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center space-x-3 text-left">
+                <div
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-sm text-white font-bold shrink-0"
+                  style={{ backgroundColor: currentUser.color || "#10B981" }}
                 >
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name} ({u.email})
-                    </option>
-                  ))}
-                </select>
-
-                <button
-                  type="button"
-                  onClick={() => setIsCreatingNew(true)}
-                  className="text-xs text-emerald-600 hover:text-emerald-700 font-bold block"
-                >
-                  + 새 사용자 이름으로 등록하고 참여하기
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  {currentUser.name.charAt(0)}
+                </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                    이름
-                  </label>
+                  <p className="text-xs font-bold text-slate-800">
+                    <span className="text-emerald-700">{currentUser.name}</span> 계정으로 로그인되어 있습니다.
+                  </p>
+                  <p className="text-[10px] text-slate-400">{currentUser.email}</p>
+                </div>
+              </div>
+
+              {error && <p className="text-xs text-rose-500 font-semibold">{error}</p>}
+
+              <button
+                type="button"
+                onClick={handleJoinExisting}
+                disabled={joining}
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm rounded-xl shadow-xs transition-all flex items-center justify-center space-x-2"
+              >
+                <span>{joining ? "참여 처리 중..." : "이 캘린더에 지금 참여하기"}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  await fetch("/api/auth/logout", { method: "POST" });
+                  setCurrentUser(null);
+                }}
+                className="text-xs text-slate-400 hover:text-slate-600 underline"
+              >
+                다른 계정으로 로그인하기
+              </button>
+            </div>
+          ) : (
+            /* Non-logged in User view: Signup or redirect to login */
+            <form onSubmit={handleSignupAndJoin} className="space-y-4">
+              <div className="text-center pb-1">
+                <h3 className="text-sm font-bold text-slate-800">새 계정으로 간편 가입 후 참여</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  이미 계정이 있으시다면{" "}
+                  <Link
+                    href={`/login?invite=${code}`}
+                    className="text-emerald-600 font-bold hover:underline"
+                  >
+                    여기서 로그인
+                  </Link>
+                  하세요.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">이름</label>
+                <div className="relative">
+                  <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                   <input
                     type="text"
-                    placeholder="예: 홍길동, 엄마, 친구"
-                    value={newUserName}
-                    onChange={(e) => setNewUserName(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 bg-white focus:outline-none focus:border-emerald-500"
+                    placeholder="예: 홍길동, 아빠, 영희"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-emerald-500"
                     required
                   />
                 </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                    이메일
-                  </label>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">이메일</label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                   <input
                     type="email"
                     placeholder="user@example.com"
-                    value={newUserEmail}
-                    onChange={(e) => setNewUserEmail(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 bg-white focus:outline-none focus:border-emerald-500"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-emerald-500"
                     required
                   />
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => setIsCreatingNew(false)}
-                  className="text-xs text-slate-500 hover:text-slate-700 underline block"
-                >
-                  기존 사용자로 선택하기
-                </button>
               </div>
-            )}
-          </div>
 
-          {error && <p className="text-xs text-rose-500 font-semibold">{error}</p>}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">비밀번호</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="password"
+                    placeholder="비밀번호 (최소 4자리)"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-emerald-500"
+                    required
+                  />
+                </div>
+              </div>
 
-          <button
-            type="submit"
-            disabled={joining}
-            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm rounded-xl shadow-xs transition-all flex items-center justify-center space-x-2"
-          >
-            <span>{joining ? "참여 처리 중..." : "캘린더 참여하기"}</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </form>
+              {error && <p className="text-xs text-rose-500 font-semibold">{error}</p>}
+
+              <button
+                type="submit"
+                disabled={joining}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center space-x-1.5"
+              >
+                <span>{joining ? "가입 및 참여 중..." : "회원가입하고 캘린더 참여하기"}</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </form>
+          )}
+        </div>
       </div>
     </div>
   );

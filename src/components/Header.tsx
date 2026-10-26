@@ -12,6 +12,7 @@ import {
   ChevronDown,
   Sparkles,
   Check,
+  LogOut,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ko } from "date-fns/locale";
@@ -275,6 +276,18 @@ export default function Header({
                     {currentUser?.id === u.id && <Check className="w-4 h-4 text-emerald-600 shrink-0" />}
                   </button>
                 ))}
+
+                <div className="h-px bg-slate-100 my-1" />
+                <button
+                  onClick={async () => {
+                    await fetch("/api/auth/logout", { method: "POST" });
+                    window.location.href = "/login";
+                  }}
+                  className="w-full flex items-center space-x-2 px-3 py-2 text-xs text-rose-600 hover:bg-rose-50 text-left font-semibold"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>로그아웃</span>
+                </button>
               </div>
             )}
           </div>

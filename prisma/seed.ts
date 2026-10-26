@@ -1,16 +1,20 @@
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("Seeding initial TimeTree data...");
+  console.log("Seeding initial TimeTree data with passwords...");
+
+  const defaultPasswordHash = await bcrypt.hash("1234", 10);
 
   // 1. Create or upsert Users
   const me = await prisma.user.upsert({
     where: { email: "me@mytree.app" },
-    update: {},
+    update: { password: defaultPasswordHash },
     create: {
       email: "me@mytree.app",
+      password: defaultPasswordHash,
       name: "나 (호스트)",
       color: "#10B981",
       avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80",
@@ -19,9 +23,10 @@ async function main() {
 
   const member = await prisma.user.upsert({
     where: { email: "jiwoo@mytree.app" },
-    update: {},
+    update: { password: defaultPasswordHash },
     create: {
       email: "jiwoo@mytree.app",
+      password: defaultPasswordHash,
       name: "김지우",
       color: "#F59E0B",
       avatarUrl: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=120&auto=format&fit=crop&q=80",

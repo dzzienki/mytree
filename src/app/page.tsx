@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, Suspense } from "react";
+import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
 import MonthView from "@/components/MonthView";
@@ -16,6 +17,8 @@ import { addMonths, subMonths, addWeeks, subWeeks, addDays, subDays } from "date
 import { CalendarDto, EventDto, KeepItemDto, ActivityLogDto, UserDto } from "@/types";
 
 function CalendarApp() {
+  const router = useRouter();
+
   // Navigation & State
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [activeTab, setActiveTab] = useState<"month" | "week" | "list" | "keep" | "feed">("month");
@@ -29,7 +32,7 @@ function CalendarApp() {
   const [events, setEvents] = useState<EventDto[]>([]);
   const [keepItems, setKeepItems] = useState<KeepItemDto[]>([]);
   const [activities, setActivities] = useState<ActivityLogDto[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [authChecking, setAuthChecking] = useState(true);
 
   // Modals state
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
@@ -43,29 +46,41 @@ function CalendarApp() {
   const [calendarToEdit, setCalendarToEdit] = useState<CalendarDto | null>(null);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
 
-  // 1. Initial Load: Users
+  // 1. Initial Load: Check Auth Session
   useEffect(() => {
-    async function initUsers() {
+    async function checkAuthAndInit() {
       try {
-        const res = await fetch("/api/users");
-        if (res.ok) {
-          const data: UserDto[] = await res.json();
-          setUsers(data);
-          if (data.length > 0) {
-            setCurrentUser(data[0]);
-          }
+        const authRes = await fetch("/api/auth/me");
+        const authData = await authRes.json();
+
+        if (!authData.user) {
+          router.push("/login");
+          return;
+        }
+
+        setCurrentUser(authData.user);
+
+        // Fetch other users for team member assignments
+        const usersRes = await fetch("/api/users");
+        if (usersRes.ok) {
+          const uData: UserDto[] = await usersRes.json();
+          setUsers(uData);
         }
       } catch (e) {
-        console.error("Failed to load users:", e);
+        console.error("Auth check failed:", e);
+        router.push("/login");
+      } finally {
+        setAuthChecking(false);
       }
     }
-    initUsers();
+
+    checkAuthAndInit();
 
     // Register PWA Service Worker
     if (typeof window !== "undefined" && "serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
-  }, []);
+  }, [router]);
 
   // 2. Load Calendars when currentUser is set
   const loadCalendars = useCallback(async () => {
@@ -144,7 +159,6 @@ function CalendarApp() {
     loadEvents();
     loadKeepItems();
     loadActivities();
-    setLoading(false);
   }, [loadEvents, loadKeepItems, loadActivities]);
 
   // Date Navigation
@@ -192,6 +206,14 @@ function CalendarApp() {
     loadKeepItems();
     loadActivities();
   };
+
+  if (authChecking || !currentUser) {
+    return (
+      <div className="h-screen w-screen bg-slate-100 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-100">
