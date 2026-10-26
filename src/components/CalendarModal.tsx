@@ -71,7 +71,6 @@ export default function CalendarModal({
             name,
             description,
             color,
-            userId: currentUser.id,
           }),
         });
       }

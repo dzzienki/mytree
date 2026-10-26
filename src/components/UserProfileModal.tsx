@@ -117,8 +117,8 @@ export default function UserProfileModal({
         setError("현재 비밀번호를 입력해 주세요.");
         return;
       }
-      if (newPassword.length < 4) {
-        setError("새 비밀번호는 최소 4자리 이상이어야 합니다.");
+      if (newPassword.length < 8) {
+        setError("새 비밀번호는 최소 8자리 이상이어야 합니다.");
         return;
       }
       if (newPassword !== confirmPassword) {

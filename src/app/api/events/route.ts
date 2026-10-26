@@ -1,24 +1,26 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireUser, getMembership, forbidden, USER_PUBLIC_SELECT } from "@/lib/auth";
+
+const userSel = { select: USER_PUBLIC_SELECT } as const;
 
 export async function GET(req: Request) {
   try {
+    const auth = await requireUser();
+    if (auth instanceof Response) return auth;
+
     const { searchParams } = new URL(req.url);
     const calendarId = searchParams.get("calendarId");
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
-    const userId = searchParams.get("userId");
 
     const where: any = {};
 
     if (calendarId && calendarId !== "all") {
+      if (!(await getMembership(calendarId, auth.id))) return forbidden();
       where.calendarId = calendarId;
-    } else if (userId) {
-      where.calendar = {
-        members: {
-          some: { userId },
-        },
-      };
+    } else {
+      where.calendar = { members: { some: { userId: auth.id } } };
     }
 
     if (startDate && endDate) {
@@ -48,16 +50,16 @@ export async function GET(req: Request) {
       where,
       include: {
         label: true,
-        creator: true,
+        creator: userSel,
         calendar: {
           select: { id: true, name: true, color: true },
         },
         participants: {
-          include: { user: true },
+          include: { user: userSel },
         },
         attachments: true,
         comments: {
-          include: { user: true },
+          include: { user: userSel },
           orderBy: { createdAt: "asc" },
         },
         _count: {
@@ -76,10 +78,12 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const auth = await requireUser();
+    if (auth instanceof Response) return auth;
+
     const body = await req.json();
     const {
       calendarId,
-      creatorId,
       labelId,
       title,
       description,
@@ -93,18 +97,28 @@ export async function POST(req: Request) {
       attachments = [],
     } = body;
 
-    if (!calendarId || !creatorId || !title || !startAt || !endAt) {
+    if (!calendarId || !title || !startAt || !endAt) {
       return NextResponse.json(
-        { error: "Required fields are missing (calendarId, creatorId, title, startAt, endAt)" },
+        { error: "Required fields are missing (calendarId, title, startAt, endAt)" },
         { status: 400 }
       );
     }
+    if (!(await getMembership(calendarId, auth.id))) return forbidden();
+
+    // Only keep labels / participants that belong to this calendar
+    const validLabel = labelId
+      ? await prisma.label.findFirst({ where: { id: labelId, calendarId }, select: { id: true } })
+      : null;
+    const validParticipants = await prisma.calendarMember.findMany({
+      where: { calendarId, userId: { in: participantIds } },
+      select: { userId: true },
+    });
 
     const event = await prisma.event.create({
       data: {
         calendarId,
-        creatorId,
-        labelId: labelId || null,
+        creatorId: auth.id,
+        labelId: validLabel?.id ?? null,
         title,
         description: description || null,
         location: location || null,
@@ -114,7 +128,7 @@ export async function POST(req: Request) {
         endAt: new Date(endAt),
         recurrenceRule: recurrenceRule || null,
         participants: {
-          create: participantIds.map((userId: string) => ({ userId })),
+          create: validParticipants.map((m) => ({ userId: m.userId })),
         },
         attachments: {
           create: attachments.map((att: any) => ({
@@ -126,9 +140,9 @@ export async function POST(req: Request) {
       },
       include: {
         label: true,
-        creator: true,
+        creator: userSel,
         calendar: { select: { id: true, name: true, color: true } },
-        participants: { include: { user: true } },
+        participants: { include: { user: userSel } },
         attachments: true,
         _count: { select: { comments: true } },
       },
@@ -138,7 +152,7 @@ export async function POST(req: Request) {
     await prisma.activityLog.create({
       data: {
         calendarId,
-        userId: creatorId,
+        userId: auth.id,
         action: "CREATED_EVENT",
         targetTitle: title,
         details: JSON.stringify({ eventId: event.id, startAt }),

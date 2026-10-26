@@ -1,30 +1,39 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireUser, getMembership, forbidden, USER_PUBLIC_SELECT } from "@/lib/auth";
+
+const userSel = { select: USER_PUBLIC_SELECT } as const;
+
+const eventInclude = {
+  label: true,
+  creator: userSel,
+  calendar: { select: { id: true, name: true, color: true } },
+  participants: { include: { user: userSel } },
+  attachments: true,
+  comments: {
+    include: { user: userSel },
+    orderBy: { createdAt: "asc" },
+  },
+} as const;
 
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireUser();
+    if (auth instanceof Response) return auth;
+
     const { id } = await params;
     const event = await prisma.event.findUnique({
       where: { id },
-      include: {
-        label: true,
-        creator: true,
-        calendar: { select: { id: true, name: true, color: true } },
-        participants: { include: { user: true } },
-        attachments: true,
-        comments: {
-          include: { user: true },
-          orderBy: { createdAt: "asc" },
-        },
-      },
+      include: eventInclude,
     });
 
     if (!event) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
+    if (!(await getMembership(event.calendarId, auth.id))) return forbidden();
 
     return NextResponse.json(event);
   } catch (error) {
@@ -38,7 +47,16 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireUser();
+    if (auth instanceof Response) return auth;
+
     const { id } = await params;
+    const existing = await prisma.event.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ error: "Event not found" }, { status: 404 });
+    }
+    if (!(await getMembership(existing.calendarId, auth.id))) return forbidden();
+
     const body = await req.json();
     const {
       title,
@@ -52,8 +70,19 @@ export async function PUT(
       recurrenceRule,
       participantIds,
       attachments,
-      updaterId,
     } = body;
+
+    // Only keep a label that belongs to this event's calendar
+    let nextLabelId: string | null | undefined = undefined;
+    if (labelId !== undefined) {
+      const label = labelId
+        ? await prisma.label.findFirst({
+            where: { id: labelId, calendarId: existing.calendarId },
+            select: { id: true },
+          })
+        : null;
+      nextLabelId = label?.id ?? null;
+    }
 
     // If attachments provided, update relation
     if (attachments !== undefined) {
@@ -72,17 +101,18 @@ export async function PUT(
       }
     }
 
-    // If participantIds provided, update relation
+    // If participantIds provided, update relation (members of this calendar only)
     if (participantIds !== undefined) {
+      const members = await prisma.calendarMember.findMany({
+        where: { calendarId: existing.calendarId, userId: { in: participantIds } },
+        select: { userId: true },
+      });
       await prisma.eventParticipant.deleteMany({
         where: { eventId: id },
       });
-      if (participantIds.length > 0) {
+      if (members.length > 0) {
         await prisma.eventParticipant.createMany({
-          data: participantIds.map((userId: string) => ({
-            eventId: id,
-            userId,
-          })),
+          data: members.map((m) => ({ eventId: id, userId: m.userId })),
         });
       }
     }
@@ -94,36 +124,24 @@ export async function PUT(
         ...(description !== undefined && { description }),
         ...(location !== undefined && { location }),
         ...(url !== undefined && { url }),
-        ...(labelId !== undefined && { labelId: labelId || null }),
+        ...(nextLabelId !== undefined && { labelId: nextLabelId }),
         ...(isAllDay !== undefined && { isAllDay }),
         ...(startAt && { startAt: new Date(startAt) }),
         ...(endAt && { endAt: new Date(endAt) }),
         ...(recurrenceRule !== undefined && { recurrenceRule }),
       },
-      include: {
-        label: true,
-        creator: true,
-        calendar: { select: { id: true, name: true, color: true } },
-        participants: { include: { user: true } },
-        attachments: true,
-        comments: {
-          include: { user: true },
-          orderBy: { createdAt: "asc" },
-        },
-      },
+      include: eventInclude,
     });
 
-    if (updaterId) {
-      await prisma.activityLog.create({
-        data: {
-          calendarId: event.calendarId,
-          userId: updaterId,
-          action: "UPDATED_EVENT",
-          targetTitle: event.title,
-          details: JSON.stringify({ eventId: event.id }),
-        },
-      });
-    }
+    await prisma.activityLog.create({
+      data: {
+        calendarId: event.calendarId,
+        userId: auth.id,
+        action: "UPDATED_EVENT",
+        targetTitle: event.title,
+        details: JSON.stringify({ eventId: event.id }),
+      },
+    });
 
     return NextResponse.json(event);
   } catch (error) {
@@ -137,9 +155,10 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireUser();
+    if (auth instanceof Response) return auth;
+
     const { id } = await params;
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
 
     const event = await prisma.event.findUnique({
       where: { id },
@@ -148,21 +167,20 @@ export async function DELETE(
     if (!event) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
+    if (!(await getMembership(event.calendarId, auth.id))) return forbidden();
 
     await prisma.event.delete({
       where: { id },
     });
 
-    if (userId) {
-      await prisma.activityLog.create({
-        data: {
-          calendarId: event.calendarId,
-          userId,
-          action: "DELETED_EVENT",
-          targetTitle: event.title,
-        },
-      });
-    }
+    await prisma.activityLog.create({
+      data: {
+        calendarId: event.calendarId,
+        userId: auth.id,
+        action: "DELETED_EVENT",
+        targetTitle: event.title,
+      },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

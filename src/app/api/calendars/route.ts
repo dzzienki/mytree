@@ -1,25 +1,18 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireUser, USER_PUBLIC_SELECT } from "@/lib/auth";
 
-export async function GET(req: Request) {
+const memberInclude = { include: { user: { select: USER_PUBLIC_SELECT } } } as const;
+
+export async function GET() {
   try {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
+    const auth = await requireUser();
+    if (auth instanceof Response) return auth;
 
     const calendars = await prisma.calendar.findMany({
-      where: userId
-        ? {
-            members: {
-              some: { userId },
-            },
-          }
-        : undefined,
+      where: { members: { some: { userId: auth.id } } },
       include: {
-        members: {
-          include: {
-            user: true,
-          },
-        },
+        members: memberInclude,
         labels: {
           orderBy: { orderIndex: "asc" },
         },
@@ -42,11 +35,14 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const { name, description, color, userId } = body;
+    const auth = await requireUser();
+    if (auth instanceof Response) return auth;
 
-    if (!name || !userId) {
-      return NextResponse.json({ error: "Name and userId are required" }, { status: 400 });
+    const body = await req.json();
+    const { name, description, color } = body;
+
+    if (typeof name !== "string" || !name.trim()) {
+      return NextResponse.json({ error: "Name is required" }, { status: 400 });
     }
 
     const defaultLabels = [
@@ -59,12 +55,12 @@ export async function POST(req: Request) {
 
     const calendar = await prisma.calendar.create({
       data: {
-        name,
+        name: name.trim(),
         description,
         color: color || "#10B981",
         members: {
           create: {
-            userId,
+            userId: auth.id,
             role: "OWNER",
           },
         },
@@ -73,9 +69,7 @@ export async function POST(req: Request) {
         },
       },
       include: {
-        members: {
-          include: { user: true },
-        },
+        members: memberInclude,
         labels: true,
       },
     });

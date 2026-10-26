@@ -43,7 +43,7 @@ function LoginForm() {
         return;
       }
 
-      // If inviteCode was present, redirect to invite page or home
+      // Existing account + invite: confirm joining on the invite page
       if (inviteCode && mode === "login") {
         router.push(`/invite/${inviteCode}`);
       } else {
@@ -54,13 +54,6 @@ function LoginForm() {
       setError("서버 통신 중 오류가 발생했습니다.");
       setLoading(false);
     }
-  };
-
-  // Quick 1-click demo login helper
-  const handleQuickLogin = (demoEmail: string) => {
-    setEmail(demoEmail);
-    setPassword("1234");
-    setMode("login");
   };
 
   return (
@@ -154,7 +147,8 @@ function LoginForm() {
               <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
               <input
                 type="password"
-                placeholder="비밀번호 입력 (최소 4자리)"
+                placeholder={mode === "signup" ? "비밀번호 (최소 8자리)" : "비밀번호 입력"}
+                minLength={mode === "signup" ? 8 : undefined}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-emerald-500"
@@ -173,31 +167,6 @@ function LoginForm() {
             <span>{loading ? "처리 중..." : mode === "login" ? "로그인" : "회원가입 완료"}</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
-
-          {/* Quick Demo Login (Convenience) */}
-          <div className="pt-3 border-t border-slate-100">
-            <p className="text-[11px] text-slate-400 text-center mb-2 font-medium">
-              ⚡ 빠른 테스트를 위한 1초 로그인:
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickLogin("me@mytree.app")}
-                className="p-2 bg-slate-50 hover:bg-slate-100 rounded-xl text-left border border-slate-200/80 transition-colors"
-              >
-                <p className="text-[11px] font-bold text-slate-800">🌱 나 (호스트)</p>
-                <p className="text-[9px] text-slate-400">me@mytree.app</p>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickLogin("jiwoo@mytree.app")}
-                className="p-2 bg-slate-50 hover:bg-slate-100 rounded-xl text-left border border-slate-200/80 transition-colors"
-              >
-                <p className="text-[11px] font-bold text-slate-800">🍊 김지우 (가족)</p>
-                <p className="text-[9px] text-slate-400">jiwoo@mytree.app</p>
-              </button>
-            </div>
-          </div>
         </form>
       </div>
     </div>

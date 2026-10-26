@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireUser } from "@/lib/auth";
 
+// Public: lets an invitee preview the calendar before signing up / joining
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ code: string }> }
@@ -10,13 +12,11 @@ export async function GET(
     const calendar = await prisma.calendar.findUnique({
       where: { inviteCode: code },
       select: {
-        id: true,
         name: true,
         description: true,
         color: true,
-        inviteCode: true,
         _count: {
-          select: { members: true, events: true },
+          select: { members: true },
         },
       },
     });
@@ -32,18 +32,16 @@ export async function GET(
   }
 }
 
+// Joins the logged-in user to the calendar behind the invite code
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ code: string }> }
 ) {
   try {
-    const { code } = await params;
-    const body = await req.json();
-    const { userId } = body;
+    const auth = await requireUser();
+    if (auth instanceof Response) return auth;
 
-    if (!userId) {
-      return NextResponse.json({ error: "User ID is required" }, { status: 400 });
-    }
+    const { code } = await params;
 
     const calendar = await prisma.calendar.findUnique({
       where: { inviteCode: code },
@@ -53,36 +51,15 @@ export async function POST(
       return NextResponse.json({ error: "Calendar not found" }, { status: 404 });
     }
 
-    // Check if already a member
-    const existing = await prisma.calendarMember.findUnique({
+    await prisma.calendarMember.upsert({
       where: {
-        calendarId_userId: {
-          calendarId: calendar.id,
-          userId,
-        },
+        calendarId_userId: { calendarId: calendar.id, userId: auth.id },
       },
+      update: {},
+      create: { calendarId: calendar.id, userId: auth.id, role: "MEMBER" },
     });
 
-    if (existing) {
-      return NextResponse.json({
-        message: "Already a member",
-        calendarId: calendar.id,
-      });
-    }
-
-    const member = await prisma.calendarMember.create({
-      data: {
-        calendarId: calendar.id,
-        userId,
-        role: "MEMBER",
-      },
-    });
-
-    return NextResponse.json({
-      success: true,
-      calendarId: calendar.id,
-      member,
-    });
+    return NextResponse.json({ success: true, calendarId: calendar.id });
   } catch (error) {
     console.error("POST /api/invite/[code] error:", error);
     return NextResponse.json({ error: "Failed to join calendar" }, { status: 500 });

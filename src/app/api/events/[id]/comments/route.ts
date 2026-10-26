@@ -1,18 +1,22 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireUser, getMembership, forbidden, USER_PUBLIC_SELECT } from "@/lib/auth";
 
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireUser();
+    if (auth instanceof Response) return auth;
+
     const { id: eventId } = await params;
     const body = await req.json();
-    const { userId, content } = body;
+    const { content } = body;
 
-    if (!userId || !content?.trim()) {
+    if (typeof content !== "string" || !content.trim()) {
       return NextResponse.json(
-        { error: "User ID and comment content are required" },
+        { error: "Comment content is required" },
         { status: 400 }
       );
     }
@@ -24,15 +28,16 @@ export async function POST(
     if (!event) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
+    if (!(await getMembership(event.calendarId, auth.id))) return forbidden();
 
     const comment = await prisma.eventComment.create({
       data: {
         eventId,
-        userId,
+        userId: auth.id,
         content: content.trim(),
       },
       include: {
-        user: true,
+        user: { select: USER_PUBLIC_SELECT },
       },
     });
 
@@ -40,7 +45,7 @@ export async function POST(
     await prisma.activityLog.create({
       data: {
         calendarId: event.calendarId,
-        userId,
+        userId: auth.id,
         action: "COMMENTED",
         targetTitle: event.title,
         details: JSON.stringify({ commentId: comment.id, content: content.slice(0, 50) }),

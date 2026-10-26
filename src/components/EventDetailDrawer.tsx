@@ -76,7 +76,6 @@ export default function EventDetailDrawer({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: currentUser.id,
           content: commentText.trim(),
         }),
       });
@@ -97,7 +96,7 @@ export default function EventDetailDrawer({
   const handleDelete = async () => {
     if (!confirm("정말로 이 일정을 삭제하시겠습니까?")) return;
     try {
-      await fetch(`/api/events/${event.id}?userId=${currentUser?.id}`, {
+      await fetch(`/api/events/${event.id}`, {
         method: "DELETE",
       });
       onDeleted(event.id);

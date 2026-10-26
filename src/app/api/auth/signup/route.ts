@@ -1,18 +1,28 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { hashPassword, createAuthToken, AUTH_COOKIE_NAME } from "@/lib/auth";
+import { hashPassword, createAuthToken, setSessionCookie, MIN_PASSWORD_LENGTH } from "@/lib/auth";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { name, email, password, inviteCode } = body;
 
-    if (!name || !email || !password) {
+    if (
+      typeof name !== "string" || typeof email !== "string" || typeof password !== "string" ||
+      !name.trim() || !email || !password
+    ) {
       return NextResponse.json({ error: "이름, 이메일, 비밀번호를 모두 입력해 주세요." }, { status: 400 });
     }
 
-    if (password.length < 4) {
-      return NextResponse.json({ error: "비밀번호는 최소 4자리 이상이어야 합니다." }, { status: 400 });
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      return NextResponse.json(
+        { error: `비밀번호는 최소 ${MIN_PASSWORD_LENGTH}자리 이상이어야 합니다.` },
+        { status: 400 }
+      );
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      return NextResponse.json({ error: "올바른 이메일 주소를 입력해 주세요." }, { status: 400 });
     }
 
     const normalizedEmail = email.trim().toLowerCase();
@@ -44,22 +54,21 @@ export async function POST(req: Request) {
 
     // Handle invite code if provided
     let joinedCalendarId: string | null = null;
-    if (inviteCode) {
-      const targetCalendar = await prisma.calendar.findUnique({
-        where: { inviteCode },
+    const targetCalendar =
+      typeof inviteCode === "string" && inviteCode
+        ? await prisma.calendar.findUnique({ where: { inviteCode } })
+        : null;
+    if (targetCalendar) {
+      await prisma.calendarMember.create({
+        data: {
+          calendarId: targetCalendar.id,
+          userId: newUser.id,
+          role: "MEMBER",
+        },
       });
-      if (targetCalendar) {
-        await prisma.calendarMember.create({
-          data: {
-            calendarId: targetCalendar.id,
-            userId: newUser.id,
-            role: "MEMBER",
-          },
-        });
-        joinedCalendarId = targetCalendar.id;
-      }
+      joinedCalendarId = targetCalendar.id;
     } else {
-      // If no invite code, create an initial personal calendar for the user
+      // No (valid) invite code: create an initial personal calendar for the user
       await prisma.calendar.create({
         data: {
           name: `${newUser.name}의 개인 캘린더`,
@@ -95,15 +104,7 @@ export async function POST(req: Request) {
       joinedCalendarId,
     });
 
-    response.cookies.set({
-      name: AUTH_COOKIE_NAME,
-      value: token,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 30 * 24 * 60 * 60,
-    });
+    setSessionCookie(response, token);
 
     return response;
   } catch (err) {
