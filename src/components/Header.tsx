@@ -13,6 +13,8 @@ import {
   Sparkles,
   Check,
   LogOut,
+  User as UserIcon,
+  Settings,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ko } from "date-fns/locale";
@@ -29,8 +31,7 @@ interface HeaderProps {
   activeTab: "month" | "week" | "list" | "keep" | "feed";
   onSelectTab: (tab: "month" | "week" | "list" | "keep" | "feed") => void;
   currentUser: UserDto | null;
-  users: UserDto[];
-  onSelectUser: (user: UserDto) => void;
+  onOpenProfile: () => void;
   onOpenNewEvent: () => void;
   onOpenInvite: () => void;
   onOpenNewCalendar: () => void;
@@ -49,8 +50,7 @@ export default function Header({
   activeTab,
   onSelectTab,
   currentUser,
-  users,
-  onSelectUser,
+  onOpenProfile,
   onOpenNewEvent,
   onOpenInvite,
   onOpenNewCalendar,
@@ -229,12 +229,12 @@ export default function Header({
             <span>일정 추가</span>
           </button>
 
-          {/* Current User Switcher Avatar */}
+          {/* Current User Profile Avatar & Menu */}
           <div className="relative">
             <button
               onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-              className="flex items-center space-x-1 p-1 rounded-full hover:ring-2 hover:ring-emerald-500/20 transition-all"
-              title="사용자 전환"
+              className="flex items-center space-x-1 p-1 rounded-full hover:ring-2 hover:ring-emerald-500/20 transition-all cursor-pointer"
+              title="내 프로필 및 설정"
             >
               <div
                 className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-xs overflow-hidden"
@@ -250,44 +250,48 @@ export default function Header({
 
             {isUserDropdownOpen && (
               <div
-                className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150"
+                className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150"
                 onClick={() => setIsUserDropdownOpen(false)}
               >
-                <div className="px-3 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  현재 사용자 (시뮬레이션)
-                </div>
-                {users.map((u) => (
-                  <button
-                    key={u.id}
-                    onClick={() => onSelectUser(u)}
-                    className={`w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-slate-50 ${
-                      currentUser?.id === u.id ? "text-emerald-600 font-semibold bg-emerald-50/50" : "text-slate-700"
-                    }`}
+                {/* User Info Header Card */}
+                <div className="px-4 py-3 border-b border-slate-100 flex items-center space-x-3">
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shadow-xs overflow-hidden shrink-0"
+                    style={{ backgroundColor: currentUser?.color || "#10B981" }}
                   >
-                    <div className="flex items-center space-x-2.5">
-                      <div
-                        className="w-6 h-6 rounded-full flex items-center justify-center text-xs text-white shrink-0"
-                        style={{ backgroundColor: u.color || "#10B981" }}
-                      >
-                        {u.name.charAt(0)}
-                      </div>
-                      <span className="truncate">{u.name}</span>
-                    </div>
-                    {currentUser?.id === u.id && <Check className="w-4 h-4 text-emerald-600 shrink-0" />}
-                  </button>
-                ))}
+                    {currentUser?.avatarUrl ? (
+                      <img src={currentUser.avatarUrl} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      currentUser?.name.charAt(0) || "U"
+                    )}
+                  </div>
+                  <div className="truncate">
+                    <p className="text-xs font-bold text-slate-900 truncate">{currentUser?.name}</p>
+                    <p className="text-[10px] text-slate-400 truncate">{currentUser?.email}</p>
+                  </div>
+                </div>
 
-                <div className="h-px bg-slate-100 my-1" />
-                <button
-                  onClick={async () => {
-                    await fetch("/api/auth/logout", { method: "POST" });
-                    window.location.href = "/login";
-                  }}
-                  className="w-full flex items-center space-x-2 px-3 py-2 text-xs text-rose-600 hover:bg-rose-50 text-left font-semibold"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>로그아웃</span>
-                </button>
+                {/* Menu items */}
+                <div className="p-1 space-y-0.5">
+                  <button
+                    onClick={() => onOpenProfile()}
+                    className="w-full flex items-center space-x-2.5 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 hover:text-emerald-700 rounded-xl transition-colors font-medium text-left"
+                  >
+                    <Settings className="w-4 h-4 text-slate-400" />
+                    <span>회원정보 및 비밀번호 변경</span>
+                  </button>
+
+                  <button
+                    onClick={async () => {
+                      await fetch("/api/auth/logout", { method: "POST" });
+                      window.location.href = "/login";
+                    }}
+                    className="w-full flex items-center space-x-2.5 px-3 py-2 text-xs text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-semibold text-left"
+                  >
+                    <LogOut className="w-4 h-4 text-rose-500" />
+                    <span>로그아웃</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>

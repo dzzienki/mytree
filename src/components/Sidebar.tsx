@@ -45,6 +45,7 @@ interface SidebarProps {
   currentUser: UserDto | null;
   events?: EventDto[];
   onSelectEvent?: (event: EventDto) => void;
+  onOpenProfile?: () => void;
 }
 
 export default function Sidebar({
@@ -60,6 +61,7 @@ export default function Sidebar({
   currentUser,
   events = [],
   onSelectEvent,
+  onOpenProfile,
 }: SidebarProps) {
   const [notificationEnabled, setNotificationEnabled] = React.useState(false);
 
@@ -287,9 +289,14 @@ export default function Sidebar({
 
       {/* Footer Info & Logout */}
       <div className="p-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
-        <div className="flex items-center space-x-2 px-1 py-1 min-w-0">
+        <button
+          type="button"
+          onClick={() => onOpenProfile && onOpenProfile()}
+          className="flex items-center space-x-2 px-1 py-1 min-w-0 text-left hover:bg-slate-100 rounded-xl transition-colors flex-1 mr-1"
+          title="내 정보 변경"
+        >
           <div
-            className="w-7 h-7 rounded-full flex items-center justify-center text-xs text-white font-bold shrink-0"
+            className="w-7 h-7 rounded-full flex items-center justify-center text-xs text-white font-bold shrink-0 overflow-hidden"
             style={{ backgroundColor: currentUser?.color || "#10B981" }}
           >
             {currentUser?.avatarUrl ? (
@@ -302,7 +309,7 @@ export default function Sidebar({
             <p className="text-xs font-bold text-slate-800 truncate">{currentUser?.name}</p>
             <p className="text-[10px] text-slate-400 truncate">{currentUser?.email}</p>
           </div>
-        </div>
+        </button>
 
         <button
           onClick={async () => {

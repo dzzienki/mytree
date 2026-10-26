@@ -13,6 +13,7 @@ import EventModal from "@/components/EventModal";
 import EventDetailDrawer from "@/components/EventDetailDrawer";
 import CalendarModal from "@/components/CalendarModal";
 import InviteModal from "@/components/InviteModal";
+import UserProfileModal from "@/components/UserProfileModal";
 import { addMonths, subMonths, addWeeks, subWeeks, addDays, subDays } from "date-fns";
 import { CalendarDto, EventDto, KeepItemDto, ActivityLogDto, UserDto } from "@/types";
 
@@ -47,6 +48,7 @@ function CalendarApp() {
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [calendarToEdit, setCalendarToEdit] = useState<CalendarDto | null>(null);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   // Derived active calendar object (NO state loop!)
   const activeCalendar = useMemo(() => {
@@ -230,10 +232,7 @@ function CalendarApp() {
         activeTab={activeTab}
         onSelectTab={(tab) => setActiveTab(tab)}
         currentUser={currentUser}
-        users={users}
-        onSelectUser={(u) => {
-          setCurrentUser(u);
-        }}
+        onOpenProfile={() => setIsProfileModalOpen(true)}
         onOpenNewEvent={() => handleOpenNewEvent()}
         onOpenInvite={() => setIsInviteModalOpen(true)}
         onOpenNewCalendar={() => {
@@ -266,6 +265,7 @@ function CalendarApp() {
           currentUser={currentUser}
           events={events}
           onSelectEvent={handleSelectEvent}
+          onOpenProfile={() => setIsProfileModalOpen(true)}
         />
 
         {/* View Main Content Area */}
@@ -368,6 +368,17 @@ function CalendarApp() {
         isOpen={isInviteModalOpen}
         onClose={() => setIsInviteModalOpen(false)}
         calendar={activeCalendar}
+      />
+
+      {/* User Profile & Password Modal */}
+      <UserProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        currentUser={currentUser}
+        onUserUpdated={(updatedUser) => {
+          setCurrentUser(updatedUser);
+          refreshAll();
+        }}
       />
     </div>
   );
