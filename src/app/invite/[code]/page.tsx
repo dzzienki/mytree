@@ -63,7 +63,7 @@ function InviteContent() {
       const joinRes = await fetch(`/api/invite/${code}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: currentUser.id }),
+        body: JSON.stringify({}),
       });
 
       if (!joinRes.ok) {
@@ -153,7 +153,7 @@ function InviteContent() {
           <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center mx-auto mb-3 shadow-inner">
             <Calendar className="w-7 h-7 text-white" />
           </div>
-          <p className="text-xs uppercase font-bold tracking-widest text-white/80">TimeTree Invite</p>
+          <p className="text-xs uppercase font-bold tracking-widest text-white/80">mytree 캘린더 초대</p>
           <h1 className="text-2xl font-black mt-1">{calendar.name}</h1>
           {calendar.description && (
             <p className="text-xs text-white/90 mt-1.5 max-w-xs mx-auto">{calendar.description}</p>
@@ -262,6 +262,7 @@ function InviteContent() {
                   <input
                     type="password"
                     placeholder="비밀번호 (최소 8자리)"
+                    minLength={8}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-emerald-500"

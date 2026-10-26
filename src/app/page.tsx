@@ -27,7 +27,6 @@ function CalendarApp() {
 
   // Auth & User State
   const [currentUser, setCurrentUser] = useState<UserDto | null>(null);
-  const [users, setUsers] = useState<UserDto[]>([]);
   const [authChecking, setAuthChecking] = useState(true);
 
   // Calendar Data State
@@ -72,13 +71,6 @@ function CalendarApp() {
 
         if (isMounted) {
           setCurrentUser(authData.user);
-
-          // Fetch other users for team member assignments
-          const usersRes = await fetch("/api/users");
-          if (usersRes.ok) {
-            const uData: UserDto[] = await usersRes.json();
-            setUsers(uData);
-          }
         }
       } catch (e) {
         console.error("Auth check failed:", e);
@@ -101,9 +93,9 @@ function CalendarApp() {
   }, [router]);
 
   // 2. Load Calendars when currentUser is determined
-  const loadCalendars = useCallback(async (userId: string) => {
+  const loadCalendars = useCallback(async () => {
     try {
-      const res = await fetch(`/api/calendars?userId=${userId}`);
+      const res = await fetch("/api/calendars");
       if (res.ok) {
         const data: CalendarDto[] = await res.json();
         setCalendars(data);
@@ -119,18 +111,18 @@ function CalendarApp() {
 
   useEffect(() => {
     if (currentUser?.id) {
-      loadCalendars(currentUser.id);
+      loadCalendars();
     }
   }, [currentUser?.id, loadCalendars]);
 
   // 3. Load Events, Keep, and Activities in parallel (Only when activeCalendarId or user changes)
-  const loadCalendarData = useCallback(async (calId: string | null, userId: string) => {
+  const loadCalendarData = useCallback(async (calId: string | null) => {
     try {
       const calParam = calId || "all";
       const [eventsRes, keepRes, actRes] = await Promise.all([
-        fetch(`/api/events?calendarId=${calParam}&userId=${userId}`),
+        fetch(`/api/events?calendarId=${calParam}`),
         fetch(`/api/keep?calendarId=${calParam}`),
-        fetch(`/api/activities?calendarId=${calParam}&userId=${userId}`),
+        fetch(`/api/activities?calendarId=${calParam}`),
       ]);
 
       if (eventsRes.ok) {
@@ -152,7 +144,7 @@ function CalendarApp() {
 
   useEffect(() => {
     if (currentUser?.id) {
-      loadCalendarData(activeCalendarId, currentUser.id);
+      loadCalendarData(activeCalendarId);
     }
   }, [currentUser?.id, activeCalendarId, loadCalendarData]);
 
@@ -205,8 +197,8 @@ function CalendarApp() {
 
   const refreshAll = () => {
     if (currentUser?.id) {
-      loadCalendars(currentUser.id);
-      loadCalendarData(activeCalendarId, currentUser.id);
+      loadCalendars();
+      loadCalendarData(activeCalendarId);
     }
   };
 
@@ -302,7 +294,7 @@ function CalendarApp() {
               items={keepItems}
               activeCalendar={activeCalendar}
               currentUser={currentUser}
-              onRefresh={() => currentUser?.id && loadCalendarData(activeCalendarId, currentUser.id)}
+              onRefresh={() => currentUser?.id && loadCalendarData(activeCalendarId)}
               onConvertToEvent={handleConvertToEvent}
             />
           )}
@@ -310,7 +302,7 @@ function CalendarApp() {
           {activeTab === "feed" && (
             <FeedView
               activities={activities}
-              onRefresh={() => currentUser?.id && loadCalendarData(activeCalendarId, currentUser.id)}
+              onRefresh={() => currentUser?.id && loadCalendarData(activeCalendarId)}
             />
           )}
         </main>

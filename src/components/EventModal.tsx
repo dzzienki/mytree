@@ -174,7 +174,6 @@ export default function EventModal({
             description,
             participantIds,
             attachments,
-            updaterId: currentUser.id,
           }),
         });
       } else {
@@ -184,7 +183,6 @@ export default function EventModal({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             calendarId,
-            creatorId: currentUser.id,
             title,
             labelId,
             isAllDay,
@@ -219,7 +217,7 @@ export default function EventModal({
     if (!confirm("정말로 이 일정을 삭제하시겠습니까?")) return;
 
     try {
-      await fetch(`/api/events/${eventToEdit.id}?userId=${currentUser?.id}`, {
+      await fetch(`/api/events/${eventToEdit.id}`, {
         method: "DELETE",
       });
       if (onDeleted) onDeleted(eventToEdit.id);

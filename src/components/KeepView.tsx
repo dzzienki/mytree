@@ -113,7 +113,6 @@ export default function KeepView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           calendarId: activeCalendar.id,
-          creatorId: currentUser.id,
           title,
           content: finalContent,
           isChecklist,
