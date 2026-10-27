@@ -5,13 +5,19 @@
 #   ./scripts/deploy.sh --no-pull  same, but skip `git pull` (deploy what is checked out)
 #
 # Run from anywhere; it always operates on the repo this script lives in.
-# Env overrides: PM2_NAME (default mytree), PORT (default 3100; 3000 is often taken by other apps).
+# The app runs as a systemd *user* unit (scripts/systemd/mytree.service), so it can also be
+# controlled directly:  systemctl --user {status|restart|stop} mytree   /   journalctl --user -u mytree -f
+# Env overrides: PORT (default 3100; 3000 is often taken by other apps), PM2_NAME (legacy pm2 app to retire, default mytree).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+DIR="$(pwd -P)"
 
 PM2_NAME="${PM2_NAME:-mytree}"
 PORT="${PORT:-3100}"
+UNIT_NAME="mytree"
+UNIT_TPL="$DIR/scripts/systemd/$UNIT_NAME.service"
+UNIT_DST="$HOME/.config/systemd/user/$UNIT_NAME.service"
 PULL=1
 [ "${1:-}" = "--no-pull" ] && PULL=0
 
@@ -22,6 +28,8 @@ step "Checking environment"
 command -v node >/dev/null || fail "node is not installed"
 [ "$(node -p 'process.versions.node.split(".")[0]')" -ge 20 ] || fail "Node.js 20+ is required (found $(node -v))"
 [ -f .env ] || fail ".env is missing. Run: cp .env.example .env  and fill in DATABASE_URL and JWT_SECRET"
+command -v systemctl >/dev/null && systemctl --user show-environment >/dev/null 2>&1 \
+  || fail "systemctl --user is not available (log in via SSH/console so the user session exists)"
 
 # Read values without sourcing the file, so special characters in passwords are not interpreted.
 env_value() { grep -E "^$1=" .env | tail -n1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'; }
@@ -43,15 +51,36 @@ npm run db:push
 step "Building"
 npm run build
 
-step "Restarting on port $PORT"
-if command -v pm2 >/dev/null; then
-  # Delete + start (instead of restart) so a changed port or name always takes effect.
-  pm2 delete "$PM2_NAME" >/dev/null 2>&1 || true
-  pm2 start npm --name "$PM2_NAME" -- start -- -p "$PORT"
-  pm2 save
-  pm2 status "$PM2_NAME"
-else
-  printf 'pm2 not found. Build finished; start the server manually with: npm run start -- -p %s\n' "$PORT"
+# One-time migration: retire the old pm2 app so it releases the port before systemd takes over.
+if command -v pm2 >/dev/null && pm2 describe "$PM2_NAME" >/dev/null 2>&1; then
+  step "Retiring legacy pm2 app '$PM2_NAME'"
+  pm2 delete "$PM2_NAME" >/dev/null
+  pm2 save >/dev/null
 fi
+
+step "Installing systemd user unit"
+mkdir -p "$(dirname "$UNIT_DST")"
+TMP_UNIT="$(mktemp)"
+sed -e "s|@DIR@|$DIR|g" -e "s|@PORT@|$PORT|g" -e "s|@NODE_BIN@|$(dirname "$(command -v node)")|g" \
+  "$UNIT_TPL" > "$TMP_UNIT"
+if ! cmp -s "$TMP_UNIT" "$UNIT_DST"; then
+  install -m 644 "$TMP_UNIT" "$UNIT_DST"
+  systemctl --user daemon-reload
+  echo "installed: $UNIT_DST"
+fi
+rm -f "$TMP_UNIT"
+systemctl --user enable "$UNIT_NAME" >/dev/null 2>&1
+if [ "$(loginctl show-user "$USER" -p Linger --value 2>/dev/null)" != "yes" ]; then
+  echo "WARN: to keep it running after logout/reboot, run once: sudo loginctl enable-linger $USER"
+fi
+
+step "Restarting on port $PORT"
+systemctl --user restart "$UNIT_NAME"
+sleep 2
+systemctl --user is-active --quiet "$UNIT_NAME" || {
+  systemctl --user status "$UNIT_NAME" --no-pager -n 20 || true
+  fail "$UNIT_NAME failed to start"
+}
+systemctl --user status "$UNIT_NAME" --no-pager -n 5 || true
 
 step "Done"

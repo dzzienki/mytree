@@ -1,0 +1,15 @@
+# systemd 사용자 유닛 템플릿 — scripts/deploy.sh 가 @값@ 을 채워 ~/.config/systemd/user/mytree.service 로 설치한다.
+[Unit]
+Description=mytree (Next.js)
+After=network.target
+
+[Service]
+WorkingDirectory=@DIR@
+Environment=PATH=@NODE_BIN@:/usr/local/bin:/usr/bin
+Environment=NODE_ENV=production
+ExecStart=@DIR@/node_modules/.bin/next start -p @PORT@
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
