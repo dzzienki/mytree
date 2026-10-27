@@ -1,4 +1,6 @@
 // Service Worker for mytree PWA & Notifications
+// Registered at <basePath>/sw.js, so its scope tells us the base path ("" or "/mytree").
+const BASE = new URL(self.registration.scope).pathname.replace(/\/$/, "");
 self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
@@ -13,11 +15,11 @@ self.addEventListener("push", (event) => {
     const data = event.data.json();
     const options = {
       body: data.body || "mytree 새로운 소식이 있습니다.",
-      icon: "/icons/icon.svg",
-      badge: "/icons/icon.svg",
+      icon: BASE + "/icons/icon.svg",
+      badge: BASE + "/icons/icon.svg",
       vibrate: [100, 50, 100],
       data: {
-        url: data.url || "/",
+        url: data.url || BASE + "/",
       },
     };
     event.waitUntil(self.registration.showNotification(data.title || "mytree", options));
@@ -27,7 +29,7 @@ self.addEventListener("push", (event) => {
 // Handle notification click
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const urlToOpen = event.notification.data?.url || "/";
+  const urlToOpen = event.notification.data?.url || BASE + "/";
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {

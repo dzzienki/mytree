@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { prisma } from "./prisma";
 import { UserDto } from "@/types";
+import { BASE_PATH } from "./base-path";
 
 export const AUTH_COOKIE_NAME = "mytree_session";
 
@@ -53,6 +54,9 @@ export function verifyAuthToken(token: string): { userId: string; email: string;
   }
 }
 
+// Scoped to the base path so other apps sharing the domain never receive the session cookie.
+const COOKIE_PATH = BASE_PATH || "/";
+
 export function setAuthCookie(response: NextResponse, token: string) {
   response.cookies.set({
     name: AUTH_COOKIE_NAME,
@@ -60,8 +64,21 @@ export function setAuthCookie(response: NextResponse, token: string) {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    path: "/",
+    path: COOKIE_PATH,
     maxAge: 30 * 24 * 60 * 60, // 30 days
+  });
+}
+
+/** Must use the same path as setAuthCookie or the browser keeps the cookie. */
+export function clearAuthCookie(response: NextResponse) {
+  response.cookies.set({
+    name: AUTH_COOKIE_NAME,
+    value: "",
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: COOKIE_PATH,
+    maxAge: 0,
   });
 }
 

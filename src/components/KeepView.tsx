@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from "@/lib/base-path";
 import React, { useState } from "react";
 import {
   CheckSquare,
@@ -53,7 +54,7 @@ export default function KeepView({
 
       const allDone = parsed.every((p) => p.done);
 
-      await fetch("/api/keep", {
+      await apiFetch("/api/keep", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -71,7 +72,7 @@ export default function KeepView({
 
   const handleToggleComplete = async (keepItem: KeepItemDto) => {
     try {
-      await fetch("/api/keep", {
+      await apiFetch("/api/keep", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -88,7 +89,7 @@ export default function KeepView({
   const handleDeleteItem = async (id: string) => {
     if (!confirm("이 보관 메모를 삭제하시겠습니까?")) return;
     try {
-      await fetch(`/api/keep?id=${id}`, { method: "DELETE" });
+      await apiFetch(`/api/keep?id=${id}`, { method: "DELETE" });
       onRefresh();
     } catch (e) {
       console.error(e);
@@ -108,7 +109,7 @@ export default function KeepView({
     }
 
     try {
-      await fetch("/api/keep", {
+      await apiFetch("/api/keep", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

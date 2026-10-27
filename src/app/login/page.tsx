@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from "@/lib/base-path";
 import React, { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Calendar, Lock, Mail, User, ArrowRight, Sparkles, CheckCircle2 } from "lucide-react";
@@ -29,7 +30,7 @@ function LoginForm() {
           ? { email, password }
           : { name, email, password, inviteCode };
 
-      const res = await fetch(endpoint, {
+      const res = await apiFetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

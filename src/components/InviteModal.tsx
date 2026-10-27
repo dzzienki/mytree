@@ -1,5 +1,6 @@
 "use client";
 
+import { BASE_PATH, withBase } from "@/lib/base-path";
 import React, { useState } from "react";
 import { X, Copy, Check, Users, Shield, Share2 } from "lucide-react";
 import { CalendarDto } from "@/types";
@@ -16,7 +17,7 @@ export default function InviteModal({ isOpen, onClose, calendar }: InviteModalPr
   if (!isOpen || !calendar) return null;
 
   const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
-  const inviteUrl = `${origin}/invite/${calendar.inviteCode}`;
+  const inviteUrl = `${origin}${BASE_PATH}/invite/${calendar.inviteCode}`;
 
   const handleCopy = async () => {
     try {
@@ -97,7 +98,7 @@ export default function InviteModal({ isOpen, onClose, calendar }: InviteModalPr
                     style={{ backgroundColor: m.user?.color || "#10B981" }}
                   >
                     {m.user?.avatarUrl ? (
-                      <img src={m.user.avatarUrl} alt="" className="w-full h-full object-cover" />
+                      <img src={withBase(m.user.avatarUrl)} alt="" className="w-full h-full object-cover" />
                     ) : (
                       m.user?.name.charAt(0) || "U"
                     )}

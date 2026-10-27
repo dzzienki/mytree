@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch, withBase } from "@/lib/base-path";
 import React from "react";
 import {
   Calendar as CalendarIcon,
@@ -300,7 +301,7 @@ export default function Sidebar({
             style={{ backgroundColor: currentUser?.color || "#10B981" }}
           >
             {currentUser?.avatarUrl ? (
-              <img src={currentUser.avatarUrl} alt="" className="w-full h-full rounded-full object-cover" />
+              <img src={withBase(currentUser.avatarUrl)} alt="" className="w-full h-full rounded-full object-cover" />
             ) : (
               currentUser?.name.charAt(0) || "U"
             )}
@@ -313,8 +314,8 @@ export default function Sidebar({
 
         <button
           onClick={async () => {
-            await fetch("/api/auth/logout", { method: "POST" });
-            window.location.href = "/login";
+            await apiFetch("/api/auth/logout", { method: "POST" });
+            window.location.href = withBase("/login");
           }}
           className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0"
           title="로그아웃"

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch, withBase } from "@/lib/base-path";
 import React, { useState, useEffect } from "react";
 import { format } from "date-fns";
 import {
@@ -115,7 +116,7 @@ export default function EventModal({
         const formData = new FormData();
         formData.append("file", file);
 
-        const res = await fetch("/api/upload", {
+        const res = await apiFetch("/api/upload", {
           method: "POST",
           body: formData,
         });
@@ -158,7 +159,7 @@ export default function EventModal({
     try {
       if (eventToEdit) {
         // Update
-        await fetch(`/api/events/${eventToEdit.id}`, {
+        await apiFetch(`/api/events/${eventToEdit.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -178,7 +179,7 @@ export default function EventModal({
         });
       } else {
         // Create
-        await fetch("/api/events", {
+        await apiFetch("/api/events", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -217,7 +218,7 @@ export default function EventModal({
     if (!confirm("정말로 이 일정을 삭제하시겠습니까?")) return;
 
     try {
-      await fetch(`/api/events/${eventToEdit.id}`, {
+      await apiFetch(`/api/events/${eventToEdit.id}`, {
         method: "DELETE",
       });
       if (onDeleted) onDeleted(eventToEdit.id);
@@ -466,7 +467,7 @@ export default function EventModal({
                     className="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 group shadow-xs"
                   >
                     <img
-                      src={att.fileUrl}
+                      src={withBase(att.fileUrl)}
                       alt={att.fileName}
                       className="w-full h-full object-cover"
                     />

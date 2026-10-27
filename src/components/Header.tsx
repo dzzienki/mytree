@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch, withBase } from "@/lib/base-path";
 import React, { useState } from "react";
 import {
   Calendar as CalendarIcon,
@@ -241,7 +242,7 @@ export default function Header({
                 style={{ backgroundColor: currentUser?.color || "#10B981" }}
               >
                 {currentUser?.avatarUrl ? (
-                  <img src={currentUser.avatarUrl} alt={currentUser.name} className="w-full h-full object-cover" />
+                  <img src={withBase(currentUser.avatarUrl)} alt={currentUser.name} className="w-full h-full object-cover" />
                 ) : (
                   currentUser?.name.charAt(0) || "U"
                 )}
@@ -260,7 +261,7 @@ export default function Header({
                     style={{ backgroundColor: currentUser?.color || "#10B981" }}
                   >
                     {currentUser?.avatarUrl ? (
-                      <img src={currentUser.avatarUrl} alt="" className="w-full h-full object-cover" />
+                      <img src={withBase(currentUser.avatarUrl)} alt="" className="w-full h-full object-cover" />
                     ) : (
                       currentUser?.name.charAt(0) || "U"
                     )}
@@ -283,8 +284,8 @@ export default function Header({
 
                   <button
                     onClick={async () => {
-                      await fetch("/api/auth/logout", { method: "POST" });
-                      window.location.href = "/login";
+                      await apiFetch("/api/auth/logout", { method: "POST" });
+                      window.location.href = withBase("/login");
                     }}
                     className="w-full flex items-center space-x-2.5 px-3 py-2 text-xs text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-semibold text-left"
                   >

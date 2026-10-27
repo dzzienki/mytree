@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch, withBase } from "@/lib/base-path";
 import React, { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { ko } from "date-fns/locale";
@@ -49,7 +50,7 @@ export default function EventDetailDrawer({
         setComments(event.comments);
       }
       // Always fetch latest comments from server
-      fetch(`/api/events/${event.id}`)
+      apiFetch(`/api/events/${event.id}`)
         .then((res) => res.json())
         .then((data) => {
           if (data && data.comments) {
@@ -72,7 +73,7 @@ export default function EventDetailDrawer({
 
     setLoadingComment(true);
     try {
-      const res = await fetch(`/api/events/${event.id}/comments`, {
+      const res = await apiFetch(`/api/events/${event.id}/comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -96,7 +97,7 @@ export default function EventDetailDrawer({
   const handleDelete = async () => {
     if (!confirm("정말로 이 일정을 삭제하시겠습니까?")) return;
     try {
-      await fetch(`/api/events/${event.id}`, {
+      await apiFetch(`/api/events/${event.id}`, {
         method: "DELETE",
       });
       onDeleted(event.id);
@@ -241,7 +242,7 @@ export default function EventDetailDrawer({
                       className="aspect-square rounded-xl overflow-hidden border border-slate-200 cursor-pointer hover:opacity-90 hover:scale-[1.02] transition-all shadow-2xs"
                     >
                       <img
-                        src={att.fileUrl}
+                        src={withBase(att.fileUrl)}
                         alt={att.fileName}
                         className="w-full h-full object-cover"
                       />
@@ -292,7 +293,7 @@ export default function EventDetailDrawer({
                       style={{ backgroundColor: c.user?.color || "#10B981" }}
                     >
                       {c.user?.avatarUrl ? (
-                        <img src={c.user.avatarUrl} alt="" className="w-full h-full object-cover" />
+                        <img src={withBase(c.user.avatarUrl)} alt="" className="w-full h-full object-cover" />
                       ) : (
                         c.user?.name.charAt(0) || "U"
                       )}
@@ -356,7 +357,7 @@ export default function EventDetailDrawer({
             <X className="w-6 h-6" />
           </button>
           <img
-            src={previewImageUrl}
+            src={withBase(previewImageUrl)}
             alt="첨부 이미지 확대"
             className="max-w-full max-h-[85vh] rounded-xl object-contain shadow-2xl"
           />

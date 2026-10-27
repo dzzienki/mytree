@@ -1,5 +1,6 @@
 "use client";
 
+import { withBase } from "@/lib/base-path";
 import React from "react";
 import { formatDistanceToNow, format } from "date-fns";
 import { ko } from "date-fns/locale";
@@ -103,7 +104,7 @@ export default function FeedView({ activities, onRefresh }: FeedViewProps) {
                   style={{ backgroundColor: act.user.color || "#10B981" }}
                 >
                   {act.user.avatarUrl ? (
-                    <img src={act.user.avatarUrl} alt="" className="w-full h-full object-cover" />
+                    <img src={withBase(act.user.avatarUrl)} alt="" className="w-full h-full object-cover" />
                   ) : (
                     act.user.name.charAt(0)
                   )}

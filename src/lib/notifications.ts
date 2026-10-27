@@ -1,3 +1,4 @@
+import { withBase } from "./base-path";
 /**
  * Browser Notification Helper for mytree
  */
@@ -35,7 +36,7 @@ export function sendLocalNotification(
     try {
       const notification = new Notification(title, {
         body: options?.body || "새로운 일정이 등록되거나 변경되었습니다.",
-        icon: options?.icon || "/icons/icon.svg",
+        icon: options?.icon || withBase("/icons/icon.svg"),
         tag: options?.tag,
       });
 

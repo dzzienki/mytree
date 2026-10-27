@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from "@/lib/base-path";
 import React, { useState, useEffect, Suspense } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Calendar, Users, ArrowRight, Sparkles, Lock, Mail, User as UserIcon } from "lucide-react";
@@ -25,7 +26,7 @@ function InviteContent() {
       try {
         setLoading(true);
         // 1. Fetch invite info
-        const calRes = await fetch(`/api/invite/${code}`);
+        const calRes = await apiFetch(`/api/invite/${code}`);
         if (!calRes.ok) {
           setError("유효하지 않거나 만료된 초대 링크입니다.");
           return;
@@ -34,7 +35,7 @@ function InviteContent() {
         setCalendar(calData);
 
         // 2. Check if already logged in
-        const authRes = await fetch("/api/auth/me");
+        const authRes = await apiFetch("/api/auth/me");
         if (authRes.ok) {
           const authData = await authRes.json();
           if (authData.user) {
@@ -60,7 +61,7 @@ function InviteContent() {
     setError("");
 
     try {
-      const joinRes = await fetch(`/api/invite/${code}`, {
+      const joinRes = await apiFetch(`/api/invite/${code}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
@@ -87,7 +88,7 @@ function InviteContent() {
     setError("");
 
     try {
-      const signupRes = await fetch("/api/auth/signup", {
+      const signupRes = await apiFetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -200,7 +201,7 @@ function InviteContent() {
               <button
                 type="button"
                 onClick={async () => {
-                  await fetch("/api/auth/logout", { method: "POST" });
+                  await apiFetch("/api/auth/logout", { method: "POST" });
                   setCurrentUser(null);
                 }}
                 className="text-xs text-slate-400 hover:text-slate-600 underline"

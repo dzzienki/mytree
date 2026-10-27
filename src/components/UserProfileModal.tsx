@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch, withBase } from "@/lib/base-path";
 import React, { useState, useEffect } from "react";
 import {
   X,
@@ -82,7 +83,7 @@ export default function UserProfileModal({
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("/api/upload", {
+      const res = await apiFetch("/api/upload", {
         method: "POST",
         body: formData,
       });
@@ -140,7 +141,7 @@ export default function UserProfileModal({
         payload.newPassword = newPassword;
       }
 
-      const res = await fetch("/api/auth/me", {
+      const res = await apiFetch("/api/auth/me", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -193,7 +194,7 @@ export default function UserProfileModal({
                 style={{ backgroundColor: color }}
               >
                 {avatarUrl ? (
-                  <img src={avatarUrl} alt={name} className="w-full h-full object-cover" />
+                  <img src={withBase(avatarUrl)} alt={name} className="w-full h-full object-cover" />
                 ) : (
                   name.charAt(0) || "U"
                 )}

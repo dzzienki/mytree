@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch, withBase } from "@/lib/base-path";
 import React, { useState, useEffect, useCallback, Suspense, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
@@ -61,7 +62,7 @@ function CalendarApp() {
 
     async function checkAuthAndInit() {
       try {
-        const authRes = await fetch("/api/auth/me");
+        const authRes = await apiFetch("/api/auth/me");
         const authData = await authRes.json();
 
         if (!authData.user) {
@@ -84,7 +85,7 @@ function CalendarApp() {
 
     // Register PWA Service Worker
     if (typeof window !== "undefined" && "serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
+      navigator.serviceWorker.register(withBase("/sw.js")).catch(() => {});
     }
 
     return () => {
@@ -95,7 +96,7 @@ function CalendarApp() {
   // 2. Load Calendars when currentUser is determined
   const loadCalendars = useCallback(async () => {
     try {
-      const res = await fetch("/api/calendars");
+      const res = await apiFetch("/api/calendars");
       if (res.ok) {
         const data: CalendarDto[] = await res.json();
         setCalendars(data);
@@ -120,9 +121,9 @@ function CalendarApp() {
     try {
       const calParam = calId || "all";
       const [eventsRes, keepRes, actRes] = await Promise.all([
-        fetch(`/api/events?calendarId=${calParam}`),
-        fetch(`/api/keep?calendarId=${calParam}`),
-        fetch(`/api/activities?calendarId=${calParam}`),
+        apiFetch(`/api/events?calendarId=${calParam}`),
+        apiFetch(`/api/keep?calendarId=${calParam}`),
+        apiFetch(`/api/activities?calendarId=${calParam}`),
       ]);
 
       if (eventsRes.ok) {

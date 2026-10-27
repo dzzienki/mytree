@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from "@/lib/base-path";
 import React, { useState, useEffect } from "react";
 import { X, Trash2, Palette } from "lucide-react";
 import { CalendarDto, UserDto } from "@/types";
@@ -58,13 +59,13 @@ export default function CalendarModal({
     setLoading(true);
     try {
       if (calendarToEdit) {
-        await fetch(`/api/calendars/${calendarToEdit.id}`, {
+        await apiFetch(`/api/calendars/${calendarToEdit.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name, description, color }),
         });
       } else {
-        await fetch("/api/calendars", {
+        await apiFetch("/api/calendars", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -88,7 +89,7 @@ export default function CalendarModal({
     if (!confirm(`'${calendarToEdit.name}' 캘린더를 정말 삭제하시겠습니까? 관련 모든 일정이 삭제됩니다.`)) return;
 
     try {
-      await fetch(`/api/calendars/${calendarToEdit.id}`, { method: "DELETE" });
+      await apiFetch(`/api/calendars/${calendarToEdit.id}`, { method: "DELETE" });
       if (onDeleted) onDeleted(calendarToEdit.id);
       onSaved();
       onClose();
