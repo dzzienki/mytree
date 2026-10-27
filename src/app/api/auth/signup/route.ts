@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, createAuthToken, setAuthCookie, handleError, HttpError } from "@/lib/auth";
 import { bad, str, MIN_PASSWORD_LENGTH } from "@/lib/validate";
-import { newInviteCode } from "@/lib/invite";
+import { consumeOneTimeLink, newInviteCode, resolveInvite } from "@/lib/invite";
 import { clientIp, isLimited, record } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
@@ -29,9 +29,12 @@ export async function POST(req: Request) {
     // calendars are shared solely through the invite link. A supplied-but-invalid code is
     // rejected instead of silently ignored so the user doesn't end up in the wrong place.
     let targetCalendar = null;
+    let oneTimeLinkId: string | null = null;
     if (typeof inviteCode === "string" && inviteCode) {
-      targetCalendar = await prisma.calendar.findUnique({ where: { inviteCode } });
-      if (!targetCalendar) throw new HttpError(400, "유효하지 않은 초대 링크입니다.");
+      const invite = await resolveInvite(inviteCode);
+      if (!invite) throw new HttpError(400, "유효하지 않거나 이미 사용된 초대 링크입니다.");
+      targetCalendar = invite.calendar;
+      oneTimeLinkId = invite.oneTimeLinkId;
     }
 
     const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
@@ -51,6 +54,8 @@ export async function POST(req: Request) {
         data: { name, email: normalizedEmail, password: hashedPassword, color: randomColor },
       });
       if (targetCalendar) {
+        // Spent inside this transaction: if anything below fails, the link is not burned.
+        if (oneTimeLinkId) await consumeOneTimeLink(tx, oneTimeLinkId, user.id);
         await tx.calendarMember.create({
           data: { calendarId: targetCalendar.id, userId: user.id, role: "MEMBER" },
         });

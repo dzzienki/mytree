@@ -2,7 +2,7 @@
 
 import { BASE_PATH, apiFetch, withBase } from "@/lib/base-path";
 import React, { useState } from "react";
-import { X, Copy, Check, Users, Share2, RefreshCw, UserMinus } from "lucide-react";
+import { X, Copy, Check, Users, Share2, RefreshCw, UserMinus, Link2 } from "lucide-react";
 import { CalendarDto, UserDto } from "@/types";
 
 interface InviteModalProps {
@@ -21,6 +21,10 @@ export default function InviteModal({ isOpen, onClose, calendar, currentUser, on
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  // One-time link: the plain code only exists in this component's state (the server keeps a hash).
+  const [oneTimeUrl, setOneTimeUrl] = useState("");
+  const [oneTimeExpires, setOneTimeExpires] = useState("");
+  const [oneTimeCopied, setOneTimeCopied] = useState(false);
 
   if (!isOpen || !calendar) return null;
 
@@ -47,6 +51,43 @@ export default function InviteModal({ isOpen, onClose, calendar, currentUser, on
       setBusy(false);
       setConfirmRegen(false);
       setConfirmRemoveId(null);
+    }
+  };
+
+  // The one-time link can't be shown again, so closing the modal forgets it.
+  const handleClose = () => {
+    setOneTimeUrl("");
+    onClose();
+  };
+
+  const handleCreateOneTime = async () => {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await apiFetch(`/api/calendars/${calendar.id}/invite-links`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "일회용 링크를 만들지 못했습니다.");
+        return;
+      }
+      setOneTimeUrl(`${origin}${BASE_PATH}/invite/${data.code}`);
+      setOneTimeExpires(new Date(data.expiresAt).toLocaleDateString("ko-KR", { month: "long", day: "numeric" }));
+      setOneTimeCopied(false);
+    } catch (e) {
+      setError("서버 통신 중 오류가 발생했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCopyOneTime = async () => {
+    try {
+      await navigator.clipboard.writeText(oneTimeUrl);
+      setOneTimeCopied(true);
+      setTimeout(() => setOneTimeCopied(false), 2000);
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -87,7 +128,7 @@ export default function InviteModal({ isOpen, onClose, calendar, currentUser, on
               <p className="text-xs text-slate-500">{calendar.name}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-slate-600">
+          <button onClick={handleClose} className="p-1 rounded-lg text-slate-400 hover:text-slate-600">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -119,6 +160,53 @@ export default function InviteModal({ isOpen, onClose, calendar, currentUser, on
           <p className="text-[11px] text-slate-400">
             초대받은 사람은 링크를 클릭하여 캘린더에 참여할 수 있습니다.
           </p>
+
+          {/* One-time link: works for one person only and expires after 7 days */}
+          <div className="mt-1 p-2.5 rounded-xl bg-emerald-50/60 border border-emerald-100 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-1.5 text-[11px] font-bold text-emerald-800">
+                <Link2 className="w-3.5 h-3.5" />
+                <span>일회용 링크</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleCreateOneTime}
+                disabled={busy}
+                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold disabled:opacity-50"
+              >
+                {oneTimeUrl ? "새로 만들기" : "일회용 링크 만들기"}
+              </button>
+            </div>
+            <p className="text-[11px] text-emerald-700/80">
+              한 명이 쓰면 바로 사라지고, 쓰지 않아도 7일 뒤 만료됩니다.
+            </p>
+
+            {oneTimeUrl && (
+              <div className="space-y-1.5">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={oneTimeUrl}
+                    className="flex-1 px-3 py-2 text-xs rounded-xl border border-emerald-200 bg-white text-slate-600 font-mono focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCopyOneTime}
+                    className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                      oneTimeCopied ? "bg-emerald-600 text-white" : "bg-slate-900 hover:bg-slate-800 text-white shadow-xs"
+                    }`}
+                  >
+                    {oneTimeCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    <span>{oneTimeCopied ? "복사됨!" : "복사"}</span>
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  {oneTimeExpires}까지 유효합니다. 이 창을 닫으면 링크를 다시 볼 수 없으니 지금 복사해 전달하세요.
+                </p>
+              </div>
+            )}
+          </div>
 
           {canManage && !confirmRegen && (
             <button
@@ -248,7 +336,7 @@ export default function InviteModal({ isOpen, onClose, calendar, currentUser, on
         {/* Footer */}
         <div className="pt-2">
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-colors"
           >
             닫기

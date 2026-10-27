@@ -42,6 +42,23 @@ model Calendar {
   labels         Label[]
   keepItems      KeepItem[]
   activities     ActivityLog[]
+  inviteLinks    InviteLink[]
+}
+
+// Single-use invite link. Only a hash of the code is stored (the code is shown once at creation).
+model InviteLink {
+  id          String    @id @default(cuid())
+  calendarId  String
+  codeHash    String    @unique
+  createdById String
+  expiresAt   DateTime
+  usedAt      DateTime?
+  usedById    String?
+  createdAt   DateTime  @default(now())
+
+  calendar    Calendar  @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+
+  @@index([calendarId])
 }
 
 model CalendarMember {
