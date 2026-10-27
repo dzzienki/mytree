@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { handleError, requireUser } from "@/lib/auth";
 import { hexColor, str } from "@/lib/validate";
 import { calendarInclude } from "@/lib/includes";
+import { newInviteCode } from "@/lib/invite";
 
 export async function GET(req: Request) {
   try {
@@ -44,6 +45,7 @@ export async function POST(req: Request) {
         name,
         description,
         color: color || "#10B981",
+        inviteCode: newInviteCode(),
         members: { create: { userId: me.id, role: "OWNER" } },
         labels: { create: defaultLabels },
       },

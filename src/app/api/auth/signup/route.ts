@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, createAuthToken, setAuthCookie, handleError, HttpError } from "@/lib/auth";
 import { bad, str, MIN_PASSWORD_LENGTH } from "@/lib/validate";
+import { newInviteCode } from "@/lib/invite";
 import { clientIp, isLimited, record } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
@@ -42,7 +43,9 @@ export async function POST(req: Request) {
     const colors = ["#10B981", "#3B82F6", "#EC4899", "#F59E0B", "#8B5CF6", "#06B6D4"];
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
 
-    // User + calendar membership succeed or fail together.
+    // Everything below succeeds or fails together. Every new user gets a personal calendar;
+    // an invite additionally joins them to the shared calendar. Personal and shared events
+    // are then kept apart by choosing the calendar when creating an event.
     const newUser = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: { name, email: normalizedEmail, password: hashedPassword, color: randomColor },
@@ -51,23 +54,23 @@ export async function POST(req: Request) {
         await tx.calendarMember.create({
           data: { calendarId: targetCalendar.id, userId: user.id, role: "MEMBER" },
         });
-      } else {
-        await tx.calendar.create({
-          data: {
-            name: `${user.name}의 개인 캘린더`,
-            description: "나만의 소중한 일정과 계획",
-            color: randomColor,
-            members: { create: { userId: user.id, role: "OWNER" } },
-            labels: {
-              create: [
-                { name: "개인 일정", colorHex: randomColor, orderIndex: 0 },
-                { name: "약속 / 모임", colorHex: "#3B82F6", orderIndex: 1 },
-                { name: "할 일 / 메모", colorHex: "#F59E0B", orderIndex: 2 },
-              ],
-            },
-          },
-        });
       }
+      await tx.calendar.create({
+        data: {
+          name: `${user.name}의 개인 캘린더`,
+          description: "나만의 소중한 일정과 계획",
+          color: randomColor,
+          inviteCode: newInviteCode(),
+          members: { create: { userId: user.id, role: "OWNER" } },
+          labels: {
+            create: [
+              { name: "개인 일정", colorHex: randomColor, orderIndex: 0 },
+              { name: "약속 / 모임", colorHex: "#3B82F6", orderIndex: 1 },
+              { name: "할 일 / 메모", colorHex: "#F59E0B", orderIndex: 2 },
+            ],
+          },
+        },
+      });
       return user;
     });
 

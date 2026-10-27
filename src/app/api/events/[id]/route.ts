@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { handleError, requireMember, requireUser, HttpError } from "@/lib/auth";
+import { assertCanModifyEvent, handleError, requireMember, requireUser, HttpError } from "@/lib/auth";
 import { eventInclude } from "@/lib/includes";
 import { assertCalendarRefs, attachmentList, bad, date, httpUrl, idArray, str } from "@/lib/validate";
 
 async function loadEvent(id: string) {
-  const event = await prisma.event.findUnique({ where: { id }, select: { id: true, calendarId: true, title: true, startAt: true, endAt: true } });
+  const event = await prisma.event.findUnique({ where: { id }, select: { id: true, calendarId: true, creatorId: true, title: true, startAt: true, endAt: true } });
   if (!event) throw new HttpError(404, "Event not found");
   return event;
 }
@@ -35,7 +35,8 @@ export async function PUT(
     const { id } = await params;
     const me = await requireUser(req);
     const existing = await loadEvent(id);
-    await requireMember(me.id, existing.calendarId, "MEMBER");
+    const role = await requireMember(me.id, existing.calendarId, "MEMBER");
+    assertCanModifyEvent(role, existing.creatorId, me.id);
 
     const body = await req.json();
     const title = str(body.title, "제목", 200);
@@ -107,7 +108,8 @@ export async function DELETE(
     const { id } = await params;
     const me = await requireUser(req);
     const event = await loadEvent(id);
-    await requireMember(me.id, event.calendarId, "MEMBER");
+    const role = await requireMember(me.id, event.calendarId, "MEMBER");
+    assertCanModifyEvent(role, event.creatorId, me.id);
 
     await prisma.$transaction([
       prisma.event.delete({ where: { id } }),

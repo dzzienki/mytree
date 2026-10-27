@@ -28,6 +28,8 @@ interface EventDetailDrawerProps {
   onEdit: (event: EventDto) => void;
   onDeleted: (id: string) => void;
   onCommentAdded?: () => void;
+  /** false hides edit/delete (members may only change events they created). */
+  canModify?: boolean;
 }
 
 export default function EventDetailDrawer({
@@ -38,6 +40,7 @@ export default function EventDetailDrawer({
   onEdit,
   onDeleted,
   onCommentAdded,
+  canModify = true,
 }: EventDetailDrawerProps) {
   const [commentText, setCommentText] = useState("");
   const [comments, setComments] = useState<EventCommentDto[]>([]);
@@ -129,20 +132,24 @@ export default function EventDetailDrawer({
             </div>
 
             <div className="flex items-center space-x-1">
-              <button
-                onClick={() => onEdit(event)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
-                title="수정"
-              >
-                <Edit className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handleDelete}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50"
-                title="삭제"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              {canModify && (
+                <>
+                  <button
+                    onClick={() => onEdit(event)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                    title="수정"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                    title="삭제"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </>
+              )}
               <button
                 onClick={onClose}
                 className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"

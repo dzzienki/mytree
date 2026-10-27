@@ -161,6 +161,15 @@ export async function requireMember(
   return role;
 }
 
+/**
+ * Members may change only the events they created; calendar owners/admins may change any.
+ * (Reading, commenting and Keep notes stay open to every member.)
+ */
+export function assertCanModifyEvent(role: Role, creatorId: string, userId: string) {
+  if (creatorId === userId || ROLE_RANK[role] >= ROLE_RANK.ADMIN) return;
+  throw new HttpError(403, "내가 만든 일정만 수정하거나 삭제할 수 있습니다.");
+}
+
 /** IDs of every calendar the user belongs to. */
 export async function memberCalendarIds(userId: string): Promise<string[]> {
   const rows = await prisma.calendarMember.findMany({

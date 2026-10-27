@@ -203,6 +203,15 @@ function CalendarApp() {
     }
   };
 
+  // Members may edit/delete only their own events; owners/admins may change any.
+  const canModifySelected = (() => {
+    if (!selectedEvent || !currentUser) return false;
+    if (selectedEvent.creatorId === currentUser.id) return true;
+    const cal = calendars.find((c) => c.id === selectedEvent.calendarId);
+    const role = cal?.members.find((m) => m.userId === currentUser.id)?.role;
+    return role === "OWNER" || role === "ADMIN";
+  })();
+
   if (authChecking || !currentUser) {
     return (
       <div className="h-screen w-screen bg-slate-100 flex items-center justify-center">
@@ -339,6 +348,7 @@ function CalendarApp() {
           refreshAll();
         }}
         onCommentAdded={refreshAll}
+        canModify={canModifySelected}
       />
 
       {/* Calendar Add/Edit Modal */}
@@ -361,6 +371,8 @@ function CalendarApp() {
         isOpen={isInviteModalOpen}
         onClose={() => setIsInviteModalOpen(false)}
         calendar={activeCalendar}
+        currentUser={currentUser}
+        onChanged={loadCalendars}
       />
 
       {/* User Profile & Password Modal */}
