@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
   env: { NEXT_PUBLIC_BASE_PATH: basePath },
   cacheComponents: true,
   partialPrefetching: true,
+  // Stored URLs are "/uploads/<name>"; they are answered by the login-protected file route.
+  async rewrites() {
+    return { beforeFiles: [{ source: "/uploads/:name", destination: "/api/files/:name" }], afterFiles: [], fallback: [] };
+  },
   turbopack: {
     rules: {
       "*.css": {

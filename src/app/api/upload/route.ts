@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import path from "path";
 import { handleError, requireUser } from "@/lib/auth";
 import { HttpError } from "@/lib/auth";
+import { UPLOAD_DIR } from "@/lib/uploads";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
@@ -33,10 +34,9 @@ export async function POST(req: Request) {
     const detected = detectImage(buffer);
     if (!detected) throw new HttpError(400, "Only image files (JPEG, PNG, WebP, GIF) are supported");
 
-    const uploadDir = path.join(process.cwd(), "public", "uploads");
-    await mkdir(uploadDir, { recursive: true });
+    await mkdir(UPLOAD_DIR, { recursive: true });
     const uniqueName = `${randomUUID()}${detected.ext}`;
-    await writeFile(path.join(uploadDir, uniqueName), buffer);
+    await writeFile(path.join(UPLOAD_DIR, uniqueName), buffer);
 
     return NextResponse.json({
       url: `/uploads/${uniqueName}`,
