@@ -24,15 +24,13 @@ export async function POST(req: Request) {
 
     const normalizedEmail = email.toLowerCase();
 
-    // Signup is invite-only. The very first account (empty database) is the one exception.
-    const userCount = await prisma.user.count();
+    // Anyone may sign up. Without an invite they only get their own personal calendar;
+    // calendars are shared solely through the invite link. A supplied-but-invalid code is
+    // rejected instead of silently ignored so the user doesn't end up in the wrong place.
     let targetCalendar = null;
-    if (userCount > 0) {
-      if (typeof inviteCode !== "string" || !inviteCode) {
-        throw new HttpError(403, "초대 링크를 통해서만 가입할 수 있습니다.");
-      }
+    if (typeof inviteCode === "string" && inviteCode) {
       targetCalendar = await prisma.calendar.findUnique({ where: { inviteCode } });
-      if (!targetCalendar) throw new HttpError(403, "유효하지 않은 초대 링크입니다.");
+      if (!targetCalendar) throw new HttpError(400, "유효하지 않은 초대 링크입니다.");
     }
 
     const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });

@@ -92,7 +92,6 @@ function LoginForm() {
           >
             로그인
           </button>
-          {inviteCode && (
           <button
             type="button"
             onClick={() => {
@@ -107,7 +106,6 @@ function LoginForm() {
           >
             회원가입
           </button>
-          )}
         </div>
 
         {/* Form Body */}
