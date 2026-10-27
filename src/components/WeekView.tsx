@@ -19,6 +19,8 @@ interface WeekViewProps {
   events: EventDto[];
   onSelectEvent: (event: EventDto) => void;
   onAddEventOnDate: (date: Date) => void;
+  onPrevWeek?: () => void;
+  onNextWeek?: () => void;
 }
 
 export default function WeekView({
@@ -26,7 +28,34 @@ export default function WeekView({
   events,
   onSelectEvent,
   onAddEventOnDate,
+  onPrevWeek,
+  onNextWeek,
 }: WeekViewProps) {
+  const touchStartX = React.useRef<number | null>(null);
+  const touchStartY = React.useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    const diffX = e.changedTouches[0].clientX - touchStartX.current;
+    const diffY = e.changedTouches[0].clientY - touchStartY.current;
+
+    // Detect horizontal swipe (distance > 50px, horizontal dominant)
+    if (Math.abs(diffX) > 50 && Math.abs(diffX) > Math.abs(diffY) * 1.5) {
+      if (diffX > 0 && onPrevWeek) {
+        onPrevWeek();
+      } else if (diffX < 0 && onNextWeek) {
+        onNextWeek();
+      }
+    }
+    touchStartX.current = null;
+    touchStartY.current = null;
+  };
+
   const weekStart = startOfWeek(currentDate);
   const weekEnd = endOfWeek(currentDate);
   const days = eachDayOfInterval({ start: weekStart, end: weekEnd });
@@ -41,7 +70,11 @@ export default function WeekView({
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-white overflow-y-auto">
+    <div
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      className="flex-1 flex flex-col h-full bg-white overflow-y-auto"
+    >
       {/* Week Header */}
       <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-slate-200 bg-slate-50 sticky top-0 z-20 shadow-xs">
         <div className="p-2 border-r border-slate-200 text-center text-xs font-semibold text-slate-400">

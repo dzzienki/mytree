@@ -22,9 +22,31 @@ import { CalendarDto, EventDto, KeepItemDto, ActivityLogDto, UserDto } from "@/t
 function CalendarApp() {
   const router = useRouter();
 
-  // Navigation & View State
-  const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
-  const [activeTab, setActiveTab] = useState<"month" | "week" | "list" | "keep" | "feed">("month");
+  // Navigation & View State (with persistence across reloads / pull-to-refresh)
+  const [currentDate, setCurrentDate] = useState<Date>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("mytree_current_date");
+        if (saved) {
+          const parsed = new Date(saved);
+          if (!isNaN(parsed.getTime())) return parsed;
+        }
+      } catch (e) {}
+    }
+    return new Date();
+  });
+
+  const [activeTab, setActiveTab] = useState<"month" | "week" | "list" | "keep" | "feed">(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("mytree_active_tab");
+        if (saved && ["month", "week", "list", "keep", "feed"].includes(saved)) {
+          return saved as "month" | "week" | "list" | "keep" | "feed";
+        }
+      } catch (e) {}
+    }
+    return "month";
+  });
   
   // TimeTree behavior: Left menu is CLOSED by default on mobile, OPEN docked on desktop (>=1024px)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -85,6 +107,35 @@ function CalendarApp() {
     return calendars.find((c) => c.id === activeCalendarId) || null;
   }, [calendars, activeCalendarId]);
 
+  // Persistent state helper functions
+  const updateCurrentDate = (newDate: Date) => {
+    setCurrentDate(newDate);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("mytree_current_date", newDate.toISOString());
+      } catch (e) {}
+    }
+  };
+
+  const handleSelectTab = (tab: "month" | "week" | "list" | "keep" | "feed") => {
+    setActiveTab(tab);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("mytree_active_tab", tab);
+      } catch (e) {}
+    }
+  };
+
+  const handleSelectCalendar = (cal: CalendarDto | null) => {
+    const nextId = cal?.id || null;
+    setActiveCalendarId(nextId);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("mytree_active_calendar_id", nextId === null ? "all" : nextId);
+      } catch (e) {}
+    }
+  };
+
   // 1. Initial Load: Auth check and users fetch (Runs ONCE on mount)
   useEffect(() => {
     let isMounted = true;
@@ -122,7 +173,7 @@ function CalendarApp() {
     };
   }, [router]);
 
-  // 2. Load Calendars when currentUser is determined
+  // 2. Load Calendars when currentUser is determined (Restore saved calendar selection)
   const loadCalendars = useCallback(async () => {
     try {
       const res = await apiFetch("/api/calendars");
@@ -131,6 +182,16 @@ function CalendarApp() {
         setCalendars(data);
         setActiveCalendarId((prevId) => {
           if (prevId && data.some((c) => c.id === prevId)) return prevId;
+
+          // Check saved preference in localStorage
+          if (typeof window !== "undefined") {
+            try {
+              const saved = localStorage.getItem("mytree_active_calendar_id");
+              if (saved === "all") return null;
+              if (saved && data.some((c) => c.id === saved)) return saved;
+            } catch (e) {}
+          }
+
           return data[0]?.id || null;
         });
       }
@@ -188,19 +249,19 @@ function CalendarApp() {
 
   // Date Navigation Handlers
   const handlePrev = () => {
-    if (activeTab === "month") setCurrentDate(subMonths(currentDate, 1));
-    else if (activeTab === "week") setCurrentDate(subWeeks(currentDate, 1));
-    else setCurrentDate(subDays(currentDate, 7));
+    if (activeTab === "month") updateCurrentDate(subMonths(currentDate, 1));
+    else if (activeTab === "week") updateCurrentDate(subWeeks(currentDate, 1));
+    else updateCurrentDate(subDays(currentDate, 7));
   };
 
   const handleNext = () => {
-    if (activeTab === "month") setCurrentDate(addMonths(currentDate, 1));
-    else if (activeTab === "week") setCurrentDate(addWeeks(currentDate, 1));
-    else setCurrentDate(addDays(currentDate, 7));
+    if (activeTab === "month") updateCurrentDate(addMonths(currentDate, 1));
+    else if (activeTab === "week") updateCurrentDate(addWeeks(currentDate, 1));
+    else updateCurrentDate(addDays(currentDate, 7));
   };
 
   const handleToday = () => {
-    setCurrentDate(new Date());
+    updateCurrentDate(new Date());
   };
 
   const handleOpenNewEvent = (targetDate?: Date, initialTitle = "", initialDesc = "") => {
@@ -255,13 +316,13 @@ function CalendarApp() {
       <Header
         activeCalendar={activeCalendar}
         calendars={calendars}
-        onSelectCalendar={(cal) => setActiveCalendarId(cal?.id || null)}
+        onSelectCalendar={handleSelectCalendar}
         currentDate={currentDate}
         onPrev={handlePrev}
         onNext={handleNext}
         onToday={handleToday}
         activeTab={activeTab}
-        onSelectTab={(tab) => setActiveTab(tab)}
+        onSelectTab={handleSelectTab}
         currentUser={currentUser}
         onOpenProfile={() => setIsProfileModalOpen(true)}
         onOpenNewEvent={() => handleOpenNewEvent()}
@@ -282,9 +343,9 @@ function CalendarApp() {
           onClose={() => setIsSidebarOpen(false)}
           calendars={calendars}
           activeCalendar={activeCalendar}
-          onSelectCalendar={(cal) => setActiveCalendarId(cal?.id || null)}
+          onSelectCalendar={handleSelectCalendar}
           currentDate={currentDate}
-          onSelectDate={(d) => setCurrentDate(d)}
+          onSelectDate={(d) => updateCurrentDate(d)}
           onOpenNewCalendar={() => {
             setCalendarToEdit(null);
             setIsCalendarModalOpen(true);
@@ -306,8 +367,10 @@ function CalendarApp() {
               currentDate={currentDate}
               events={events}
               onSelectEvent={handleSelectEvent}
-              onSelectDate={(d) => setCurrentDate(d)}
+              onSelectDate={(d) => updateCurrentDate(d)}
               onAddEventOnDate={(d) => handleOpenNewEvent(d)}
+              onPrevMonth={handlePrev}
+              onNextMonth={handleNext}
             />
           )}
 
@@ -317,6 +380,8 @@ function CalendarApp() {
               events={events}
               onSelectEvent={handleSelectEvent}
               onAddEventOnDate={(d) => handleOpenNewEvent(d)}
+              onPrevWeek={handlePrev}
+              onNextWeek={handleNext}
             />
           )}
 
@@ -389,7 +454,7 @@ function CalendarApp() {
         onSaved={refreshAll}
         onDeleted={(deletedId) => {
           if (activeCalendarId === deletedId) {
-            setActiveCalendarId(null);
+            handleSelectCalendar(null);
           }
           refreshAll();
         }}

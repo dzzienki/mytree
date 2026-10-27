@@ -25,6 +25,8 @@ interface MonthViewProps {
   onSelectEvent: (event: EventDto) => void;
   onSelectDate: (date: Date) => void;
   onAddEventOnDate: (date: Date) => void;
+  onPrevMonth?: () => void;
+  onNextMonth?: () => void;
 }
 
 export default function MonthView({
@@ -33,7 +35,34 @@ export default function MonthView({
   onSelectEvent,
   onSelectDate,
   onAddEventOnDate,
+  onPrevMonth,
+  onNextMonth,
 }: MonthViewProps) {
+  const touchStartX = React.useRef<number | null>(null);
+  const touchStartY = React.useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    const diffX = e.changedTouches[0].clientX - touchStartX.current;
+    const diffY = e.changedTouches[0].clientY - touchStartY.current;
+
+    // Detect horizontal swipe (distance > 50px, horizontal dominant)
+    if (Math.abs(diffX) > 50 && Math.abs(diffX) > Math.abs(diffY) * 1.5) {
+      if (diffX > 0 && onPrevMonth) {
+        onPrevMonth();
+      } else if (diffX < 0 && onNextMonth) {
+        onNextMonth();
+      }
+    }
+    touchStartX.current = null;
+    touchStartY.current = null;
+  };
+
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(monthStart);
   const calendarStart = startOfWeek(monthStart);
@@ -60,7 +89,11 @@ export default function MonthView({
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-white select-none">
+    <div
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      className="flex-1 flex flex-col h-full bg-white select-none"
+    >
       {/* Day of Week Header */}
       <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50/70 text-center py-2 text-xs font-semibold text-slate-500">
         {dayNames.map((name, i) => (
