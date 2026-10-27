@@ -16,6 +16,7 @@ import CalendarModal from "@/components/CalendarModal";
 import InviteModal from "@/components/InviteModal";
 import UserProfileModal from "@/components/UserProfileModal";
 import { useMobileBackHandler } from "@/hooks/useMobileBackHandler";
+import { useEventReminders } from "@/hooks/useEventReminders";
 import { addMonths, subMonths, addWeeks, subWeeks, addDays, subDays } from "date-fns";
 import { CalendarDto, EventDto, KeepItemDto, ActivityLogDto, UserDto } from "@/types";
 
@@ -100,6 +101,9 @@ function CalendarApp() {
       closeProfileModal: () => setIsProfileModalOpen(false),
     }
   );
+
+  // Scheduled Event Alarms: Notifies on start time (exact & 10 mins before)
+  useEventReminders(events);
 
   // Derived active calendar object (NO state loop!)
   const activeCalendar = useMemo(() => {
