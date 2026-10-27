@@ -1,7 +1,7 @@
 "use client";
 
 import { apiFetch } from "@/lib/base-path";
-import React, { useState, Suspense } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Calendar, Lock, Mail, ArrowRight, Sparkles } from "lucide-react";
 import Link from "next/link";
@@ -14,10 +14,33 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [error, setError] = useState("");
 
-  // Keep the invite code when moving between login and signup
+  const targetPath = inviteCode ? `/invite/${encodeURIComponent(inviteCode)}` : "/";
   const signupHref = inviteCode ? `/signup?invite=${encodeURIComponent(inviteCode)}` : "/signup";
+
+  // If user is ALREADY authenticated, automatically bounce them to the calendar (using replace!)
+  useEffect(() => {
+    let isMounted = true;
+    apiFetch("/api/auth/me")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!isMounted) return;
+        if (data && data.user) {
+          router.replace(targetPath);
+        } else {
+          setCheckingAuth(false);
+        }
+      })
+      .catch(() => {
+        if (isMounted) setCheckingAuth(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [router, targetPath]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,18 +62,24 @@ function LoginForm() {
         return;
       }
 
-      // Existing account + invite: confirm joining on the invite page
-      if (inviteCode) {
-        router.push(`/invite/${inviteCode}`);
-      } else {
-        router.push("/");
-      }
+      // CRITICAL FOR ANDROID BACK BUTTON:
+      // Using router.replace instead of router.push ensures /login is REPLACED in browser history.
+      // Pressing the back button inside the app will never send the user back to /login!
+      router.replace(targetPath);
       router.refresh();
     } catch (err) {
       setError("서버 통신 중 오류가 발생했습니다.");
       setLoading(false);
     }
   };
+
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">

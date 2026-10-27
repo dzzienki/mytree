@@ -1,7 +1,7 @@
 "use client";
 
 import { apiFetch } from "@/lib/base-path";
-import React, { useState, Suspense } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Calendar, Lock, Mail, User, ArrowRight, ArrowLeft, Sparkles } from "lucide-react";
 import Link from "next/link";
@@ -18,9 +18,33 @@ function SignupForm() {
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [loading, setLoading] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [error, setError] = useState("");
 
+  const targetPath = inviteCode ? `/invite/${encodeURIComponent(inviteCode)}` : "/";
   const loginHref = inviteCode ? `/login?invite=${encodeURIComponent(inviteCode)}` : "/login";
+
+  // If user is ALREADY authenticated, redirect immediately using replace
+  useEffect(() => {
+    let isMounted = true;
+    apiFetch("/api/auth/me")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!isMounted) return;
+        if (data && data.user) {
+          router.replace(targetPath);
+        } else {
+          setCheckingAuth(false);
+        }
+      })
+      .catch(() => {
+        if (isMounted) setCheckingAuth(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [router, targetPath]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,13 +71,22 @@ function SignupForm() {
         return;
       }
 
-      router.push("/");
+      // Use router.replace to avoid leaving /signup in browser history
+      router.replace(targetPath);
       router.refresh();
     } catch (err) {
       setError("서버 통신 중 오류가 발생했습니다.");
       setLoading(false);
     }
   };
+
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -158,7 +191,7 @@ function SignupForm() {
               className="inline-flex items-center space-x-1 text-xs font-semibold text-slate-500 hover:text-emerald-700 transition-colors"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>이미 계정이 있어요 (로그인으로 돌아가기)</span>
+              <span>이미 계정이 있으신가요? 로그인</span>
             </Link>
           </div>
         </form>

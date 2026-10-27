@@ -15,6 +15,7 @@ import EventDetailDrawer from "@/components/EventDetailDrawer";
 import CalendarModal from "@/components/CalendarModal";
 import InviteModal from "@/components/InviteModal";
 import UserProfileModal from "@/components/UserProfileModal";
+import { useMobileBackHandler } from "@/hooks/useMobileBackHandler";
 import { addMonths, subMonths, addWeeks, subWeeks, addDays, subDays } from "date-fns";
 import { CalendarDto, EventDto, KeepItemDto, ActivityLogDto, UserDto } from "@/types";
 
@@ -24,7 +25,15 @@ function CalendarApp() {
   // Navigation & View State
   const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
   const [activeTab, setActiveTab] = useState<"month" | "week" | "list" | "keep" | "feed">("month");
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  
+  // TimeTree behavior: Left menu is CLOSED by default on mobile, OPEN docked on desktop (>=1024px)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth >= 1024) {
+      setIsSidebarOpen(true);
+    }
+  }, []);
 
   // Auth & User State
   const [currentUser, setCurrentUser] = useState<UserDto | null>(null);
@@ -50,6 +59,26 @@ function CalendarApp() {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
+  // Android Hardware / Gesture Back Button handling for modals & sidebar drawer
+  useMobileBackHandler(
+    {
+      isSidebarOpen,
+      selectedEvent: !!selectedEvent,
+      isEventModalOpen,
+      isCalendarModalOpen,
+      isInviteModalOpen,
+      isProfileModalOpen,
+    },
+    {
+      closeSidebar: () => setIsSidebarOpen(false),
+      closeDetail: () => setSelectedEvent(null),
+      closeEventModal: () => setIsEventModalOpen(false),
+      closeCalendarModal: () => setIsCalendarModalOpen(false),
+      closeInviteModal: () => setIsInviteModalOpen(false),
+      closeProfileModal: () => setIsProfileModalOpen(false),
+    }
+  );
+
   // Derived active calendar object (NO state loop!)
   const activeCalendar = useMemo(() => {
     if (!activeCalendarId) return null;
@@ -66,7 +95,7 @@ function CalendarApp() {
         const authData = await authRes.json();
 
         if (!authData.user) {
-          router.push("/login");
+          router.replace("/login");
           return;
         }
 
@@ -75,7 +104,7 @@ function CalendarApp() {
         }
       } catch (e) {
         console.error("Auth check failed:", e);
-        router.push("/login");
+        router.replace("/login");
       } finally {
         if (isMounted) setAuthChecking(false);
       }
@@ -246,8 +275,8 @@ function CalendarApp() {
       />
 
       {/* Main Layout Area */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left Sidebar */}
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* Left Sidebar (TimeTree-style mobile overlay drawer / desktop docked sidebar) */}
         <Sidebar
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
@@ -270,8 +299,8 @@ function CalendarApp() {
           onOpenProfile={() => setIsProfileModalOpen(true)}
         />
 
-        {/* View Main Content Area */}
-        <main className="flex-1 flex flex-col overflow-hidden bg-white">
+        {/* View Main Content Area (Full screen on mobile, responsive) */}
+        <main className="flex-1 flex flex-col overflow-hidden bg-white w-full">
           {activeTab === "month" && (
             <MonthView
               currentDate={currentDate}
