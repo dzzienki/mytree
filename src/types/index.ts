@@ -112,6 +112,11 @@ export interface KeepItemDto {
   createdAt: string;
   updatedAt: string;
   creator: UserDto;
+  calendar?: {
+    id: string;
+    name: string;
+    color: string;
+  };
 }
 
 export interface ActivityLogDto {

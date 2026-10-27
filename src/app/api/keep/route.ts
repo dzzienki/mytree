@@ -3,7 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { PUBLIC_USER_SELECT, handleError, memberCalendarIds, requireMember, requireUser, HttpError } from "@/lib/auth";
 import { hexColor, str } from "@/lib/validate";
 
-const include = { creator: { select: PUBLIC_USER_SELECT } };
+const include = {
+  creator: { select: PUBLIC_USER_SELECT },
+  calendar: { select: { id: true, name: true, color: true } },
+};
 
 async function loadItem(id: unknown) {
   if (typeof id !== "string" || !id) throw new HttpError(400, "Item ID is required");

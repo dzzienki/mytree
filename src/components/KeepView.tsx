@@ -1,7 +1,7 @@
 "use client";
 
 import { apiFetch } from "@/lib/base-path";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   CheckSquare,
   Square,
@@ -18,6 +18,7 @@ import { KeepItemDto, KeepChecklistItem, UserDto, CalendarDto } from "@/types";
 interface KeepViewProps {
   items: KeepItemDto[];
   activeCalendar: CalendarDto | null;
+  calendars?: CalendarDto[];
   currentUser: UserDto | null;
   onRefresh: () => void;
   onConvertToEvent: (title: string, description: string) => void;
@@ -26,6 +27,7 @@ interface KeepViewProps {
 export default function KeepView({
   items,
   activeCalendar,
+  calendars = [],
   currentUser,
   onRefresh,
   onConvertToEvent,
@@ -36,6 +38,15 @@ export default function KeepView({
   const [textContent, setTextContent] = useState("");
   const [checklistItems, setChecklistItems] = useState<string[]>([""]);
   const [selectedColor, setSelectedColor] = useState("#FEF3C7"); // Default soft amber
+  const [targetCalendarId, setTargetCalendarId] = useState<string>("");
+
+  useEffect(() => {
+    if (activeCalendar) {
+      setTargetCalendarId(activeCalendar.id);
+    } else if (calendars.length > 0) {
+      setTargetCalendarId(calendars[0].id);
+    }
+  }, [activeCalendar, calendars, isAddModalOpen]);
 
   const colorPalette = [
     "#FEF3C7", // Amber
@@ -98,7 +109,8 @@ export default function KeepView({
 
   const handleCreateKeep = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !activeCalendar || !currentUser) return;
+    const chosenCalendarId = activeCalendar?.id || targetCalendarId;
+    if (!title.trim() || !chosenCalendarId || !currentUser) return;
 
     let finalContent = textContent;
     if (isChecklist) {
@@ -113,7 +125,7 @@ export default function KeepView({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          calendarId: activeCalendar.id,
+          calendarId: chosenCalendarId,
           title,
           content: finalContent,
           isChecklist,
@@ -139,10 +151,10 @@ export default function KeepView({
           <div>
             <div className="flex items-center space-x-2">
               <span className="text-xl">📌</span>
-              <h2 className="text-lg font-bold text-slate-900">Keep (보관함)</h2>
+              <h2 className="text-lg font-bold text-slate-900">Keep (공유 보관함)</h2>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              날짜가 아직 정해지지 않은 메모, 위시리스트, 장보기 목록 등을 저장하고 일정으로 변환해 보세요.
+              날짜가 아직 정해지지 않은 메모, 위시리스트, 장보기 목록을 캘린더 멤버들과 함께 공유하고 실시간으로 체크해 보세요.
             </p>
           </div>
 
@@ -174,6 +186,19 @@ export default function KeepView({
                 }`}
               >
                 <div>
+                  {/* Calendar badge (if viewing all calendars or available) */}
+                  {item.calendar && (
+                    <div className="flex items-center space-x-1.5 mb-2">
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{ backgroundColor: item.calendar.color }}
+                      />
+                      <span className="text-[10px] font-bold text-slate-500 truncate">
+                        {item.calendar.name}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Card Header */}
                   <div className="flex items-start justify-between mb-3">
                     <h3
@@ -282,6 +307,26 @@ export default function KeepView({
             </div>
 
             <form onSubmit={handleCreateKeep} className="space-y-4">
+              {/* Calendar Selector (if in "all calendars" view) */}
+              {!activeCalendar && calendars.length > 0 && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                    공유할 캘린더
+                  </label>
+                  <select
+                    value={targetCalendarId}
+                    onChange={(e) => setTargetCalendarId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-emerald-500"
+                  >
+                    {calendars.map((cal) => (
+                      <option key={cal.id} value={cal.id}>
+                        {cal.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">제목</label>
                 <input

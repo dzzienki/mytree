@@ -397,6 +397,7 @@ function CalendarApp() {
             <KeepView
               items={keepItems}
               activeCalendar={activeCalendar}
+              calendars={calendars}
               currentUser={currentUser}
               onRefresh={() => currentUser?.id && loadCalendarData(activeCalendarId)}
               onConvertToEvent={handleConvertToEvent}
