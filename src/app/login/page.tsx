@@ -3,7 +3,7 @@
 import { apiFetch } from "@/lib/base-path";
 import React, { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Calendar, Lock, Mail, User, ArrowRight, Sparkles, CheckCircle2 } from "lucide-react";
+import { Calendar, Lock, Mail, ArrowRight, Sparkles } from "lucide-react";
 import Link from "next/link";
 
 function LoginForm() {
@@ -11,12 +11,13 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const inviteCode = searchParams.get("invite");
 
-  const [mode, setMode] = useState<"login" | "signup">("login");
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Keep the invite code when moving between login and signup
+  const signupHref = inviteCode ? `/signup?invite=${encodeURIComponent(inviteCode)}` : "/signup";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,16 +25,10 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/signup";
-      const payload =
-        mode === "login"
-          ? { email, password }
-          : { name, email, password, inviteCode };
-
-      const res = await apiFetch(endpoint, {
+      const res = await apiFetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await res.json();
@@ -45,7 +40,7 @@ function LoginForm() {
       }
 
       // Existing account + invite: confirm joining on the invite page
-      if (inviteCode && mode === "login") {
+      if (inviteCode) {
         router.push(`/invite/${inviteCode}`);
       } else {
         router.push("/");
@@ -76,56 +71,9 @@ function LoginForm() {
           )}
         </div>
 
-        {/* Tab switch */}
-        <div className="flex border-b border-slate-100">
-          <button
-            type="button"
-            onClick={() => {
-              setMode("login");
-              setError("");
-            }}
-            className={`flex-1 py-3 text-xs font-bold text-center transition-colors border-b-2 ${
-              mode === "login"
-                ? "border-emerald-600 text-emerald-700"
-                : "border-transparent text-slate-400 hover:text-slate-600"
-            }`}
-          >
-            로그인
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMode("signup");
-              setError("");
-            }}
-            className={`flex-1 py-3 text-xs font-bold text-center transition-colors border-b-2 ${
-              mode === "signup"
-                ? "border-emerald-600 text-emerald-700"
-                : "border-transparent text-slate-400 hover:text-slate-600"
-            }`}
-          >
-            회원가입
-          </button>
-        </div>
-
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {mode === "signup" && (
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">이름</label>
-              <div className="relative">
-                <User className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  placeholder="예: 홍길동, 아빠, 영희"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-emerald-500"
-                  required
-                />
-              </div>
-            </div>
-          )}
+          <h2 className="text-sm font-bold text-slate-800">로그인</h2>
 
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">이메일</label>
@@ -148,8 +96,7 @@ function LoginForm() {
               <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
               <input
                 type="password"
-                placeholder={mode === "signup" ? "비밀번호 (최소 8자리)" : "비밀번호 입력"}
-                minLength={mode === "signup" ? 8 : undefined}
+                placeholder="비밀번호 입력"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-emerald-500"
@@ -165,9 +112,20 @@ function LoginForm() {
             disabled={loading}
             className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center space-x-1.5"
           >
-            <span>{loading ? "처리 중..." : mode === "login" ? "로그인" : "회원가입 완료"}</span>
+            <span>{loading ? "처리 중..." : "로그인"}</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
+
+          {/* Move to the separate signup screen */}
+          <div className="pt-3 border-t border-slate-100 text-center space-y-2">
+            <p className="text-[11px] text-slate-400">아직 계정이 없으신가요?</p>
+            <Link
+              href={signupHref}
+              className="block w-full py-2.5 bg-white hover:bg-emerald-50 text-emerald-700 font-bold text-xs rounded-xl border border-emerald-600 transition-colors"
+            >
+              회원가입
+            </Link>
+          </div>
         </form>
       </div>
     </div>
