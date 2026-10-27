@@ -63,6 +63,7 @@ export default function EventModal({
   const [attachments, setAttachments] = useState<{ fileUrl: string; fileName: string; fileType: string }[]>([]);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   // Initialize form state
   useEffect(() => {
@@ -104,6 +105,17 @@ export default function EventModal({
       setAttachments([]);
     }
   }, [eventToEdit, initialDate, initialTitle, initialDescription, activeCalendar, calendars, currentUser, isOpen]);
+
+  // Moving the start keeps the event length, so the end never ends up before the start.
+  const shiftEnd = (nextDate: string, nextTime: string) => {
+    const oldStart = new Date(`${startDateStr}T${startTimeStr}`);
+    const oldEnd = new Date(`${endDateStr}T${endTimeStr}`);
+    const newStart = new Date(`${nextDate}T${nextTime}`);
+    if ([oldStart, oldEnd, newStart].some((d) => Number.isNaN(d.getTime()))) return;
+    const newEnd = new Date(newStart.getTime() + Math.max(0, oldEnd.getTime() - oldStart.getTime()));
+    setEndDateStr(format(newEnd, "yyyy-MM-dd"));
+    setEndTimeStr(format(newEnd, "HH:mm"));
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -151,15 +163,26 @@ export default function EventModal({
     e.preventDefault();
     if (!title.trim() || !calendarId || !currentUser) return;
 
-    setLoading(true);
+    setError("");
 
     const startDateTime = new Date(`${startDateStr}T${isAllDay ? "00:00:00" : startTimeStr}`);
     const endDateTime = new Date(`${endDateStr}T${isAllDay ? "23:59:59" : endTimeStr}`);
 
+    if (Number.isNaN(startDateTime.getTime()) || Number.isNaN(endDateTime.getTime())) {
+      setError("날짜와 시간을 확인해 주세요.");
+      return;
+    }
+    if (endDateTime < startDateTime) {
+      setError("종료 시간은 시작 시간보다 빠를 수 없습니다.");
+      return;
+    }
+
+    setLoading(true);
     try {
+      let res: Response;
       if (eventToEdit) {
         // Update
-        await apiFetch(`/api/events/${eventToEdit.id}`, {
+        res = await apiFetch(`/api/events/${eventToEdit.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -179,7 +202,7 @@ export default function EventModal({
         });
       } else {
         // Create
-        await apiFetch("/api/events", {
+        res = await apiFetch("/api/events", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -198,16 +221,22 @@ export default function EventModal({
           }),
         });
 
-        // Trigger local browser push notification
-        sendLocalNotification(`🗓️ 새 일정이 등록되었습니다: ${title}`, {
+        if (res.ok) sendLocalNotification(`🗓️ 새 일정이 등록되었습니다: ${title}`, {
           body: `${format(startDateTime, "M월 d일")} ${location ? `· ${location}` : ""}`,
         });
+      }
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || "저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+        return;
       }
 
       onSaved();
       onClose();
     } catch (err) {
       console.error(err);
+      setError("서버와 통신하지 못했습니다.");
     } finally {
       setLoading(false);
     }
@@ -218,9 +247,14 @@ export default function EventModal({
     if (!confirm("정말로 이 일정을 삭제하시겠습니까?")) return;
 
     try {
-      await apiFetch(`/api/events/${eventToEdit.id}`, {
+      const res = await apiFetch(`/api/events/${eventToEdit.id}`, {
         method: "DELETE",
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || "삭제하지 못했습니다.");
+        return;
+      }
       if (onDeleted) onDeleted(eventToEdit.id);
       onSaved();
       onClose();
@@ -342,7 +376,10 @@ export default function EventModal({
               <input
                 type="date"
                 value={startDateStr}
-                onChange={(e) => setStartDateStr(e.target.value)}
+                onChange={(e) => {
+                  shiftEnd(e.target.value, startTimeStr);
+                  setStartDateStr(e.target.value);
+                }}
                 className="flex-1 px-3 py-1.5 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-emerald-500"
                 required
               />
@@ -350,8 +387,11 @@ export default function EventModal({
                 <input
                   type="time"
                   value={startTimeStr}
-                  onChange={(e) => setStartTimeStr(e.target.value)}
-                  className="w-24 px-2 py-1.5 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-emerald-500"
+                  onChange={(e) => {
+                    shiftEnd(startDateStr, e.target.value);
+                    setStartTimeStr(e.target.value);
+                  }}
+                  className="w-32 px-2 py-1.5 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-emerald-500"
                   required
                 />
               )}
@@ -372,7 +412,7 @@ export default function EventModal({
                   type="time"
                   value={endTimeStr}
                   onChange={(e) => setEndTimeStr(e.target.value)}
-                  className="w-24 px-2 py-1.5 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-emerald-500"
+                  className="w-32 px-2 py-1.5 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-emerald-500"
                   required
                 />
               )}
@@ -519,6 +559,8 @@ export default function EventModal({
               </div>
             </div>
           )}
+
+          {error && <p className="text-xs text-rose-500 font-semibold">{error}</p>}
 
           {/* Footer Actions */}
           <div className="flex items-center justify-between pt-3 border-t border-slate-100">
