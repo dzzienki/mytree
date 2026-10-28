@@ -13,6 +13,7 @@ import {
   FileText,
   Calendar,
   Image as ImageIcon,
+  Pencil,
   Upload,
   X,
 } from "lucide-react";
@@ -39,7 +40,8 @@ export default function KeepView({
   const [title, setTitle] = useState("");
   const [isChecklist, setIsChecklist] = useState(true);
   const [textContent, setTextContent] = useState("");
-  const [checklistItems, setChecklistItems] = useState<string[]>([""]);
+  const [checklistItems, setChecklistItems] = useState<{ text: string; done: boolean }[]>([{ text: "", done: false }]);
+  const [editingItem, setEditingItem] = useState<KeepItemDto | null>(null);
   const [selectedColor, setSelectedColor] = useState("#FEF3C7"); // Default soft amber
   const [targetCalendarId, setTargetCalendarId] = useState<string>("");
   const [attachments, setAttachments] = useState<{ fileUrl: string; fileName: string; fileType: string }[]>([]);
@@ -50,9 +52,37 @@ export default function KeepView({
   const resetForm = () => {
     setTitle("");
     setTextContent("");
-    setChecklistItems([""]);
+    setChecklistItems([{ text: "", done: false }]);
     setAttachments([]);
+    setSelectedColor("#FEF3C7");
+    setIsChecklist(true);
+    setEditingItem(null);
     setError("");
+  };
+
+  const openCreate = () => {
+    resetForm();
+    setIsAddModalOpen(true);
+  };
+
+  // The add modal doubles as the edit form: prefill it from the memo being edited.
+  const openEdit = (item: KeepItemDto) => {
+    resetForm();
+    setEditingItem(item);
+    setTitle(item.title);
+    setIsChecklist(item.isChecklist);
+    setSelectedColor(item.color || "#FEF3C7");
+    if (item.isChecklist) {
+      let parsed: KeepChecklistItem[] = [];
+      try {
+        parsed = item.content ? JSON.parse(item.content) : [];
+      } catch {}
+      setChecklistItems(parsed.length ? parsed.map((c) => ({ text: c.text, done: !!c.done })) : [{ text: "", done: false }]);
+    } else {
+      setTextContent(item.content || "");
+    }
+    setAttachments((item.attachments ?? []).map((a) => ({ fileUrl: a.fileUrl, fileName: a.fileName, fileType: a.fileType })));
+    setIsAddModalOpen(true);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -157,33 +187,46 @@ export default function KeepView({
     }
   };
 
-  const handleCreateKeep = async (e: React.FormEvent) => {
+  const handleSaveKeep = async (e: React.FormEvent) => {
     e.preventDefault();
-    const chosenCalendarId = activeCalendar?.id || targetCalendarId;
+    const chosenCalendarId = editingItem?.calendarId || activeCalendar?.id || targetCalendarId;
     if (!title.trim() || !chosenCalendarId || !currentUser) return;
 
     let finalContent = textContent;
+    let allDone = false;
     if (isChecklist) {
       const validItems = checklistItems
-        .filter((t) => t.trim().length > 0)
-        .map((text, idx) => ({ id: String(idx + 1), text, done: false }));
+        .filter((c) => c.text.trim().length > 0)
+        .map((c, idx) => ({ id: String(idx + 1), text: c.text, done: c.done }));
       finalContent = JSON.stringify(validItems);
+      allDone = validItems.length > 0 && validItems.every((c) => c.done);
     }
 
     if (uploading) return;
     setError("");
     try {
       const res = await apiFetch("/api/keep", {
-        method: "POST",
+        method: editingItem ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          calendarId: chosenCalendarId,
-          title,
-          content: finalContent,
-          isChecklist,
-          color: selectedColor,
-          attachments,
-        }),
+        body: JSON.stringify(
+          editingItem
+            ? {
+                id: editingItem.id,
+                title,
+                content: finalContent,
+                color: selectedColor,
+                attachments,
+                ...(isChecklist && { isCompleted: allDone }),
+              }
+            : {
+                calendarId: chosenCalendarId,
+                title,
+                content: finalContent,
+                isChecklist,
+                color: selectedColor,
+                attachments,
+              }
+        ),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -216,7 +259,7 @@ export default function KeepView({
           </div>
 
           <button
-            onClick={() => setIsAddModalOpen(true)}
+            onClick={openCreate}
             className="flex items-center justify-center space-x-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-xs shrink-0 transition-all"
           >
             <Plus className="w-4 h-4" />
@@ -266,6 +309,13 @@ export default function KeepView({
                       {item.title}
                     </h3>
                     <div className="flex items-center space-x-1 shrink-0 ml-2">
+                      <button
+                        onClick={() => openEdit(item)}
+                        className="p-1 rounded-md text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
+                        title="수정"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
                       <button
                         onClick={() => handleDeleteItem(item.id)}
                         className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
@@ -379,7 +429,7 @@ export default function KeepView({
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-100 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="text-base font-bold text-slate-900">새 Keep 메모 추가</h3>
+              <h3 className="text-base font-bold text-slate-900">{editingItem ? "Keep 메모 수정" : "새 Keep 메모 추가"}</h3>
               <button
                 onClick={() => {
                   resetForm();
@@ -391,9 +441,9 @@ export default function KeepView({
               </button>
             </div>
 
-            <form onSubmit={handleCreateKeep} className="space-y-4">
+            <form onSubmit={handleSaveKeep} className="space-y-4">
               {/* Calendar Selector (if in "all calendars" view) */}
-              {!activeCalendar && calendars.length > 0 && (
+              {!editingItem && !activeCalendar && calendars.length > 0 && (
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">
                     공유할 캘린더
@@ -424,7 +474,8 @@ export default function KeepView({
                 />
               </div>
 
-              {/* Type toggle */}
+              {/* Type toggle (the type of an existing memo can't change) */}
+              {!editingItem && (
               <div className="flex items-center space-x-2">
                 <button
                   type="button"
@@ -451,6 +502,7 @@ export default function KeepView({
                   <span>일반 텍스트 메모</span>
                 </button>
               </div>
+              )}
 
               {/* Content area */}
               {isChecklist ? (
@@ -458,14 +510,29 @@ export default function KeepView({
                   <label className="block text-xs font-semibold text-slate-600">체크 항목</label>
                   {checklistItems.map((item, idx) => (
                     <div key={idx} className="flex items-center space-x-2">
-                      <Square className="w-4 h-4 text-slate-300 shrink-0" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = [...checklistItems];
+                          updated[idx] = { ...updated[idx], done: !updated[idx].done };
+                          setChecklistItems(updated);
+                        }}
+                        className="shrink-0"
+                        title="완료 표시"
+                      >
+                        {item.done ? (
+                          <CheckSquare className="w-4 h-4 text-emerald-600" />
+                        ) : (
+                          <Square className="w-4 h-4 text-slate-300" />
+                        )}
+                      </button>
                       <input
                         type="text"
                         placeholder={`항목 ${idx + 1}`}
-                        value={item}
+                        value={item.text}
                         onChange={(e) => {
                           const updated = [...checklistItems];
-                          updated[idx] = e.target.value;
+                          updated[idx] = { ...updated[idx], text: e.target.value };
                           setChecklistItems(updated);
                         }}
                         className="flex-1 px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 focus:outline-none focus:border-emerald-500"
@@ -485,7 +552,7 @@ export default function KeepView({
                   ))}
                   <button
                     type="button"
-                    onClick={() => setChecklistItems([...checklistItems, ""])}
+                    onClick={() => setChecklistItems([...checklistItems, { text: "", done: false }])}
                     className="text-xs text-emerald-600 hover:text-emerald-700 font-semibold flex items-center space-x-1 pt-1"
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -587,7 +654,7 @@ export default function KeepView({
                   disabled={uploading}
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs"
                 >
-                  보관함에 저장
+                  {editingItem ? "수정 완료" : "보관함에 저장"}
                 </button>
               </div>
             </form>

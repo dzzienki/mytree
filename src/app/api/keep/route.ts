@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { PUBLIC_USER_SELECT, handleError, memberCalendarIds, requireMember, requireUser, HttpError } from "@/lib/auth";
 import { attachmentList, hexColor, str } from "@/lib/validate";
+import { deleteUnusedUploads } from "@/lib/uploads";
 
 const include = {
   creator: { select: PUBLIC_USER_SELECT },
@@ -80,16 +81,33 @@ export async function PUT(req: Request) {
     await requireMember(me.id, existing.calendarId, "MEMBER");
 
     const title = str(body.title, "제목", 200);
-    const item = await prisma.keepItem.update({
-      where: { id: existing.id },
-      data: {
-        ...(title && { title }),
-        ...(body.content !== undefined && { content: str(body.content, "내용", 10000) }),
-        ...(body.isCompleted !== undefined && { isCompleted: !!body.isCompleted }),
-        ...(body.color !== undefined && { color: hexColor(body.color) }),
-      },
-      include,
+    const attachments = body.attachments !== undefined ? attachmentList(body.attachments) : undefined;
+
+    // One transaction so a failure can't leave the memo with its photos wiped.
+    const { item, removedUrls } = await prisma.$transaction(async (tx) => {
+      let removed: string[] = [];
+      if (attachments !== undefined) {
+        const before = await tx.keepAttachment.findMany({ where: { keepItemId: existing.id }, select: { fileUrl: true } });
+        const keepUrls = new Set(attachments.map((a) => a.fileUrl));
+        removed = before.map((a) => a.fileUrl).filter((u) => !keepUrls.has(u));
+        await tx.keepAttachment.deleteMany({ where: { keepItemId: existing.id } });
+        if (attachments.length) {
+          await tx.keepAttachment.createMany({ data: attachments.map((a) => ({ ...a, keepItemId: existing.id })) });
+        }
+      }
+      const updated = await tx.keepItem.update({
+        where: { id: existing.id },
+        data: {
+          ...(title && { title }),
+          ...(body.content !== undefined && { content: str(body.content, "내용", 10000) }),
+          ...(body.isCompleted !== undefined && { isCompleted: !!body.isCompleted }),
+          ...(body.color !== undefined && { color: hexColor(body.color) }),
+        },
+        include,
+      });
+      return { item: updated, removedUrls: removed };
     });
+    await deleteUnusedUploads(removedUrls);
     return NextResponse.json(item);
   } catch (error) {
     return handleError(error, "PUT /api/keep", "Failed to update keep item");
@@ -102,7 +120,9 @@ export async function DELETE(req: Request) {
     const existing = await loadItem(new URL(req.url).searchParams.get("id"));
     await requireMember(me.id, existing.calendarId, "MEMBER");
 
+    const photos = await prisma.keepAttachment.findMany({ where: { keepItemId: existing.id }, select: { fileUrl: true } });
     await prisma.keepItem.delete({ where: { id: existing.id } });
+    await deleteUnusedUploads(photos.map((p) => p.fileUrl));
     return NextResponse.json({ success: true });
   } catch (error) {
     return handleError(error, "DELETE /api/keep", "Failed to delete keep item");
