@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { PUBLIC_USER_SELECT, handleError, memberCalendarIds, requireMember, requireUser, HttpError } from "@/lib/auth";
-import { hexColor, str } from "@/lib/validate";
+import { attachmentList, hexColor, str } from "@/lib/validate";
 
 const include = {
   creator: { select: PUBLIC_USER_SELECT },
   calendar: { select: { id: true, name: true, color: true } },
+  attachments: true,
 };
 
 async function loadItem(id: unknown) {
@@ -46,6 +47,7 @@ export async function POST(req: Request) {
     const calendarId = str(body.calendarId, "calendarId", 100, true)!;
     await requireMember(me.id, calendarId, "MEMBER");
     const title = str(body.title, "제목", 200, true)!;
+    const attachments = attachmentList(body.attachments);
 
     const item = await prisma.keepItem.create({
       data: {
@@ -55,6 +57,7 @@ export async function POST(req: Request) {
         content: str(body.content, "내용", 10000),
         isChecklist: !!body.isChecklist,
         color: hexColor(body.color) || "#FEF3C7",
+        attachments: { create: attachments },
       },
       include,
     });

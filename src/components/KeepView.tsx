@@ -1,6 +1,6 @@
 "use client";
 
-import { apiFetch } from "@/lib/base-path";
+import { apiFetch, withBase } from "@/lib/base-path";
 import React, { useState, useEffect } from "react";
 import {
   CheckSquare,
@@ -12,6 +12,9 @@ import {
   CheckCircle2,
   FileText,
   Calendar,
+  Image as ImageIcon,
+  Upload,
+  X,
 } from "lucide-react";
 import { KeepItemDto, KeepChecklistItem, UserDto, CalendarDto } from "@/types";
 
@@ -39,6 +42,53 @@ export default function KeepView({
   const [checklistItems, setChecklistItems] = useState<string[]>([""]);
   const [selectedColor, setSelectedColor] = useState("#FEF3C7"); // Default soft amber
   const [targetCalendarId, setTargetCalendarId] = useState<string>("");
+  const [attachments, setAttachments] = useState<{ fileUrl: string; fileName: string; fileType: string }[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const resetForm = () => {
+    setTitle("");
+    setTextContent("");
+    setChecklistItems([""]);
+    setAttachments([]);
+    setError("");
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = ""; // allow picking the same file again
+    if (files.length === 0) return;
+
+    setError("");
+    setUploading(true);
+    try {
+      for (const file of files) {
+        if (attachments.length >= 20) {
+          setError("사진은 최대 20장까지 첨부할 수 있습니다.");
+          break;
+        }
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await apiFetch("/api/upload", { method: "POST", body: formData });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setError(data.error || "사진을 올리지 못했습니다.");
+          continue;
+        }
+        const uploaded = await res.json();
+        setAttachments((prev) => [
+          ...prev,
+          { fileUrl: uploaded.url, fileName: uploaded.fileName, fileType: uploaded.fileType },
+        ]);
+      }
+    } catch (err) {
+      console.error(err);
+      setError("사진을 올리지 못했습니다.");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   useEffect(() => {
     if (activeCalendar) {
@@ -120,8 +170,10 @@ export default function KeepView({
       finalContent = JSON.stringify(validItems);
     }
 
+    if (uploading) return;
+    setError("");
     try {
-      await apiFetch("/api/keep", {
+      const res = await apiFetch("/api/keep", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -130,16 +182,21 @@ export default function KeepView({
           content: finalContent,
           isChecklist,
           color: selectedColor,
+          attachments,
         }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || "저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
 
-      setTitle("");
-      setTextContent("");
-      setChecklistItems([""]);
+      resetForm();
       setIsAddModalOpen(false);
       onRefresh();
     } catch (err) {
       console.error(err);
+      setError("서버와 통신하지 못했습니다.");
     }
   };
 
@@ -244,6 +301,31 @@ export default function KeepView({
                       {item.content}
                     </p>
                   )}
+
+                  {/* Attached photos */}
+                  {item.attachments && item.attachments.length > 0 && (
+                    <div
+                      className={`grid gap-1.5 my-3 ${
+                        item.attachments.length === 1 ? "grid-cols-1" : "grid-cols-2"
+                      }`}
+                    >
+                      {item.attachments.map((att) => (
+                        <button
+                          key={att.id}
+                          type="button"
+                          onClick={() => setPreviewUrl(att.fileUrl)}
+                          className="rounded-xl overflow-hidden border border-black/5 hover:opacity-90 transition-opacity"
+                        >
+                          <img
+                            src={withBase(att.fileUrl)}
+                            alt={att.fileName}
+                            loading="lazy"
+                            className={`w-full object-cover ${item.attachments!.length === 1 ? "max-h-64" : "h-28"}`}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Card Footer Actions */}
@@ -299,7 +381,10 @@ export default function KeepView({
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="text-base font-bold text-slate-900">새 Keep 메모 추가</h3>
               <button
-                onClick={() => setIsAddModalOpen(false)}
+                onClick={() => {
+                  resetForm();
+                  setIsAddModalOpen(false);
+                }}
                 className="text-slate-400 hover:text-slate-600 text-sm font-semibold"
               >
                 닫기
@@ -420,6 +505,48 @@ export default function KeepView({
                 </div>
               )}
 
+              {/* Photos */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-600 flex items-center space-x-1">
+                    <ImageIcon className="w-3.5 h-3.5" />
+                    <span>사진 ({attachments.length})</span>
+                  </span>
+                  <label className="cursor-pointer flex items-center space-x-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-colors">
+                    <Upload className="w-3 h-3" />
+                    <span>{uploading ? "업로드 중..." : "사진 추가"}</span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/gif,image/webp"
+                      multiple
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      disabled={uploading}
+                    />
+                  </label>
+                </div>
+                {attachments.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {attachments.map((att, idx) => (
+                      <div
+                        key={att.fileUrl}
+                        className="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 shadow-xs"
+                      >
+                        <img src={withBase(att.fileUrl)} alt={att.fileName} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setAttachments(attachments.filter((_, i) => i !== idx))}
+                          className="absolute top-1 right-1 w-5 h-5 bg-black/60 hover:bg-rose-600 text-white rounded-full flex items-center justify-center transition-colors"
+                          title="삭제"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Color picker */}
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">
@@ -442,23 +569,51 @@ export default function KeepView({
                 </div>
               </div>
 
+              {error && <p className="text-xs text-rose-500 font-semibold">{error}</p>}
+
               <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setIsAddModalOpen(false)}
+                  onClick={() => {
+                    resetForm();
+                    setIsAddModalOpen(false);
+                  }}
                   className="px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl"
                 >
                   취소
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs"
+                  disabled={uploading}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs"
                 >
                   보관함에 저장
                 </button>
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* Photo preview */}
+      {previewUrl && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setPreviewUrl(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setPreviewUrl(null)}
+            className="absolute top-4 right-4 text-white/80 hover:text-white"
+            title="닫기"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <img
+            src={withBase(previewUrl)}
+            alt="첨부 사진 확대"
+            className="max-w-full max-h-[85vh] rounded-xl object-contain shadow-2xl"
+          />
         </div>
       )}
     </div>

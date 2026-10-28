@@ -112,6 +112,7 @@ export interface KeepItemDto {
   createdAt: string;
   updatedAt: string;
   creator: UserDto;
+  attachments?: { id: string; fileUrl: string; fileName: string; fileType: string }[];
   calendar?: {
     id: string;
     name: string;

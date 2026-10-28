@@ -160,6 +160,20 @@ model KeepItem {
 
   calendar    Calendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
   creator     User     @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  attachments KeepAttachment[]
+}
+
+model KeepAttachment {
+  id         String   @id @default(cuid())
+  keepItemId String
+  fileUrl    String
+  fileName   String
+  fileType   String
+  createdAt  DateTime @default(now())
+
+  keepItem   KeepItem @relation(fields: [keepItemId], references: [id], onDelete: Cascade)
+
+  @@index([keepItemId])
 }
 
 model ActivityLog {
