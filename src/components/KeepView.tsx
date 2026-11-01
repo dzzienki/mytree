@@ -427,8 +427,8 @@ export default function KeepView({
       {/* Add Keep Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-100 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="bg-white rounded-2xl max-w-md w-full max-h-[90dvh] flex flex-col p-5 shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100 shrink-0">
               <h3 className="text-base font-bold text-slate-900">{editingItem ? "Keep 메모 수정" : "새 Keep 메모 추가"}</h3>
               <button
                 onClick={() => {
@@ -441,7 +441,9 @@ export default function KeepView({
               </button>
             </div>
 
-            <form onSubmit={handleSaveKeep} className="space-y-4">
+            <form onSubmit={handleSaveKeep} className="flex flex-col flex-1 min-h-0">
+              {/* Only the fields scroll; the title bar and the save/cancel buttons stay in view. */}
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-4 pr-1 -mr-1">
               {/* Calendar Selector (if in "all calendars" view) */}
               {!editingItem && !activeCalendar && calendars.length > 0 && (
                 <div>
@@ -636,9 +638,11 @@ export default function KeepView({
                 </div>
               </div>
 
-              {error && <p className="text-xs text-rose-500 font-semibold">{error}</p>}
+              </div>
 
-              <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-100">
+              {error && <p className="text-xs text-rose-500 font-semibold pt-3 shrink-0">{error}</p>}
+
+              <div className="flex items-center justify-end space-x-2 pt-3 mt-3 border-t border-slate-100 shrink-0">
                 <button
                   type="button"
                   onClick={() => {
